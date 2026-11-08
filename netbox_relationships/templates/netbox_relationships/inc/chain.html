@@ -1,0 +1,6 @@
+<div class="nbr-chain">
+  {% for step in chain %}
+    <span class="nbr-hop{% if forloop.last %} border-danger text-danger fw-semibold{% endif %}">{% if step.url %}<a href="{{ step.url }}">{{ step.label }}</a>{% else %}{{ step.label }}{% endif %}</span>
+    {% if step.edge %}<span class="text-muted">{{ step.edge }}</span>{% endif %}
+  {% endfor %}
+</div>

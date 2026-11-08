@@ -1,0 +1,51 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% load plugins %}
+{% load render_table from django_tables2 %}
+{% load i18n %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">{% trans "Relationship Type" %}</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">{% trans "Name" %}</th><td><span class="color-label" style="background-color: #{{ object.color }}">&nbsp;</span> {{ object.name }}</td></tr>
+        <tr><th scope="row">{% trans "Reads" %}</th><td><em>{% trans "source" %}</em> {{ object.forward_label }} <em>{% trans "target" %}</em></td></tr>
+        <tr><th scope="row">{% trans "Read back" %}</th><td><em>{% trans "target" %}</em> {{ object.reverse_label }} <em>{% trans "source" %}</em></td></tr>
+        <tr><th scope="row">{% trans "Description" %}</th><td>{{ object.description|placeholder }}</td></tr>
+        <tr><th scope="row">{% trans "Relationships" %}</th><td><a href="{% url 'plugins:netbox_relationships:relationship_list' %}?type_id={{ object.pk }}">{{ relationship_count }}</a></td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+    {% include 'inc/panels/comments.html' %}
+    {% plugin_left_page object %}
+  </div>
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">{% trans "Behaviour" %}</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">{% trans "Category" %}</th><td>{{ object.get_category_display }}</td></tr>
+        <tr><th scope="row">{% trans "Impact" %}</th><td>{% badge object.get_impact_display bg_color=object.get_impact_color %}</td></tr>
+        <tr><th scope="row">{% trans "Symmetric" %}</th><td>{% checkmark object.symmetric %}</td></tr>
+        <tr><th scope="row">{% trans "Loops allowed" %}</th><td>{% checkmark object.allow_cycles %}</td></tr>
+        <tr><th scope="row">{% trans "Cardinality" %}</th><td>{{ object.get_cardinality_display }}</td></tr>
+        <tr><th scope="row">{% trans "Reason required" %}</th><td>{% checkmark object.require_description %}</td></tr>
+        <tr><th scope="row">{% trans "Source types" %}</th><td>{% for ct in object.source_types.all %}<span class="badge text-bg-secondary">{{ ct.app_label }}.{{ ct.model }}</span> {% empty %}{% trans "Any" %}{% endfor %}</td></tr>
+        <tr><th scope="row">{% trans "Target types" %}</th><td>{% for ct in object.target_types.all %}<span class="badge text-bg-secondary">{{ ct.app_label }}.{{ ct.model }}</span> {% empty %}{% trans "Any" %}{% endfor %}</td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/custom_fields.html' %}
+    {% plugin_right_page object %}
+  </div>
+</div>
+<div class="row mb-3">
+  <div class="col col-md-12">
+    <div class="card">
+      <h2 class="card-header">{% trans "Relationships" %}</h2>
+      <div class="table-responsive">{% render_table relationships_table 'inc/table.html' %}</div>
+    </div>
+  </div>
+</div>
+{% plugin_full_width_page object %}
+{% endblock %}

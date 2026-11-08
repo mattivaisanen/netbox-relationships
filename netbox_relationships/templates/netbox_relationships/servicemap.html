@@ -1,0 +1,62 @@
+{% extends 'generic/_base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Service Map" %}{% if service %}: {{ service }}{% endif %}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% url 'plugins:netbox_relationships:asset' name='graph.css' %}">
+<form method="get" class="d-flex flex-wrap gap-2 align-items-center mb-3">
+  <label class="form-label mb-0" for="nbr-service">{% trans "Business service" %}</label>
+  <select class="form-select w-auto" id="nbr-service" name="service" onchange="this.form.submit()">
+    <option value="">{% trans "All" %}</option>
+    {% for s in services %}<option value="{{ s.pk }}"{% if service and s.pk == service.pk %} selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  {% if result %}{% for node in result.failed %}<input type="hidden" name="failed" value="{{ node.id }}">{% endfor %}{% endif %}
+</form>
+
+{% if result %}
+  <div class="alert alert-info d-flex flex-wrap gap-3 align-items-center">
+    <strong>{% trans "Impact overlay" %}:</strong>
+    <span>{% for node in result.failed %}{{ node.label }}{% if not forloop.last %}, {% endif %}{% endfor %} {% trans "fails" %}</span>
+    <span class="text-danger fw-semibold">{{ result.summary.down }} {% trans "down" %}</span>
+    <span class="text-warning fw-semibold">{{ result.summary.degraded }} {% trans "degraded" %}</span>
+    <a class="ms-auto" href="{% url 'plugins:netbox_relationships:impact' %}?{{ object_query }}">{% trans "Open full result" %}</a>
+    <a href="?{% if service %}service={{ service.pk }}{% endif %}">{% trans "Clear" %}</a>
+  </div>
+{% endif %}
+
+<div class="card">
+  <div class="nbr-band">
+    <div class="nbr-band-title">{% trans "Business services and applications" %}</div>
+    <div class="nbr-band-items">
+      {% for item in map.business %}
+        {% if item.children %}
+          <div class="nbr-group{% if item.node.state %} nbr-state-{{ item.node.state }}{% endif %}">
+            <div class="d-flex justify-content-between gap-2 fw-semibold">
+              {% if item.node.url %}<a href="{{ item.node.url }}">{{ item.node.label }}</a>{% else %}{{ item.node.label }}{% endif %}
+              {% if item.node.state %}<span class="badge text-bg-{% if item.node.state == 'degraded' %}orange{% else %}red{% endif %}">{{ item.node.state }}</span>{% endif %}
+            </div>
+            <div class="nbr-group-items">
+              {% for child in item.children %}{% include 'netbox_relationships/inc/box.html' with node=child %}{% endfor %}
+            </div>
+          </div>
+        {% else %}
+          {% include 'netbox_relationships/inc/box.html' with node=item.node %}
+        {% endif %}
+      {% empty %}
+        <span class="text-muted">{% trans "No logical services yet." %} <a href="{% url 'plugins:netbox_relationships:logicalservice_add' %}">{% trans "Add one" %}</a></span>
+      {% endfor %}
+    </div>
+  </div>
+  {% for layer, title, nodes in map.layers %}
+    <div class="nbr-band">
+      <div class="nbr-band-title">{{ title }}</div>
+      <div class="nbr-band-items">
+        {% for node in nodes %}{% include 'netbox_relationships/inc/box.html' %}{% empty %}<span class="text-muted">&mdash;</span>{% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% if map.truncated %}<div class="alert alert-warning mt-3">{% trans "Too many objects: the map was cut short." %}</div>{% endif %}
+<p class="small text-muted mt-2">{% trans "Shows logical services and everything they need, found through their relationships. Layers come from object type and can be changed in settings." %}</p>
+{% endblock %}

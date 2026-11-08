@@ -1,0 +1,50 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% load plugins %}
+{% load render_table from django_tables2 %}
+{% load i18n %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">{% trans "Logical Service" %}</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">{% trans "Name" %}</th><td>{{ object.name }}</td></tr>
+        <tr><th scope="row">{% trans "Kind" %}</th><td>{% badge object.get_kind_display bg_color=object.get_kind_color %}</td></tr>
+        <tr><th scope="row">{% trans "Part of" %}</th><td>{{ object.parent|linkify|placeholder }}</td></tr>
+        <tr><th scope="row">{% trans "Status" %}</th><td>{% badge object.get_status_display bg_color=object.get_status_color %}</td></tr>
+        <tr><th scope="row">{% trans "Criticality" %}</th><td>{% badge object.get_criticality_display bg_color=object.get_criticality_color %}</td></tr>
+        <tr><th scope="row">{% trans "Tenant" %}</th><td>{{ object.tenant|linkify|placeholder }}</td></tr>
+        <tr><th scope="row">{% trans "Link" %}</th><td>{% if object.link %}<a href="{{ object.link }}">{{ object.link }}</a>{% else %}{{ ''|placeholder }}{% endif %}</td></tr>
+        <tr><th scope="row">{% trans "Description" %}</th><td>{{ object.description|placeholder }}</td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+    {% include 'inc/panels/comments.html' %}
+    {% plugin_left_page object %}
+  </div>
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">{% trans "Architecture" %}</h2>
+      <div class="card-body">
+        <p class="mb-2">{% trans "Everything this service stands on, layer by layer." %}</p>
+        <a class="btn btn-sm btn-primary" href="{% url 'plugins:netbox_relationships:servicemap' %}?service={{ object.pk }}">
+          <i class="mdi mdi-layers-outline"></i> {% trans "Open service map" %}
+        </a>
+      </div>
+    </div>
+    {% include 'inc/panels/custom_fields.html' %}
+    {% plugin_right_page object %}
+  </div>
+</div>
+<div class="row mb-3">
+  <div class="col col-md-12">
+    <div class="card">
+      <h2 class="card-header">{% trans "Parts" %}</h2>
+      <div class="table-responsive">{% render_table children_table 'inc/table.html' %}</div>
+    </div>
+  </div>
+</div>
+{% plugin_full_width_page object %}
+{% endblock %}

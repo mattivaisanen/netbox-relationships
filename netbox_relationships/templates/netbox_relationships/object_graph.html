@@ -1,0 +1,55 @@
+{% extends base_template %}
+{% load i18n %}
+
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <form class="nbr-toolbar d-flex flex-wrap gap-2 align-items-center mb-3" data-nbr-toolbar>
+      <label class="form-label mb-0" for="nbr-depth">{% trans "Depth" %}</label>
+      <select class="form-select form-select-sm w-auto" id="nbr-depth" name="depth">
+        {% for d in depth_choices %}<option value="{{ d }}"{% if d == default_depth %} selected{% endif %}>{{ d }} {% trans "hops" %}</option>{% endfor %}
+      </select>
+      <label class="form-label mb-0" for="nbr-direction">{% trans "Direction" %}</label>
+      <select class="form-select form-select-sm w-auto" id="nbr-direction" name="direction">
+        <option value="both">{% trans "Both" %}</option>
+        <option value="down">{% trans "What it needs" %}</option>
+        <option value="up">{% trans "What needs it" %}</option>
+      </select>
+      <label class="form-label mb-0" for="nbr-layout">{% trans "Layout" %}</label>
+      <select class="form-select form-select-sm w-auto" id="nbr-layout" name="layout">
+        <option value="layered">{% trans "Layered" %}</option>
+        <option value="force">{% trans "Force" %}</option>
+        <option value="concentric">{% trans "Concentric" %}</option>
+      </select>
+      <div class="form-check mb-0">
+        <input class="form-check-input" type="checkbox" id="nbr-derived" name="derived" checked>
+        <label class="form-check-label" for="nbr-derived">{% trans "Links from NetBox" %}</label>
+      </div>
+      <span class="flex-grow-1"></span>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-nbr-action="fit">{% trans "Fit" %}</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-nbr-action="png">PNG</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-nbr-action="json">JSON</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-nbr-action="mermaid">Mermaid</button>
+    </form>
+    <div class="nbr-graph" id="nbr-graph"
+         data-api="{% url 'plugins-api:netbox_relationships-api:graph' %}"
+         data-object="{{ object_key }}"
+         data-impact-url="{% url 'plugins:netbox_relationships:impact' %}"
+         data-empty="{% trans 'No relationships yet.' %}"
+         data-truncated="{% trans 'Too many objects: the graph was cut short. Lower the depth or switch off links from NetBox.' %}"></div>
+    <div class="nbr-status small text-muted mt-2" id="nbr-status" role="status"></div>
+    <div class="nbr-legend small text-muted mt-2">
+      <span><span class="nbr-line nbr-line-manual"></span> {% trans "Manual" %}</span>
+      <span><span class="nbr-line nbr-line-netbox"></span> {% trans "From NetBox" %}</span>
+      <span><span class="nbr-line nbr-line-planned"></span> {% trans "Planned" %}</span>
+      <span><span class="nbr-swatch nbr-g-business"></span> {% trans "Business service" %}</span>
+      <span><span class="nbr-swatch nbr-g-application"></span> {% trans "Application" %}</span>
+      <span><span class="nbr-swatch nbr-g-service"></span> {% trans "Service" %}</span>
+      <span><span class="nbr-swatch nbr-g-vm"></span> {% trans "Virtual machine" %}</span>
+      <span><span class="nbr-swatch nbr-g-device"></span> {% trans "Device" %}</span>
+      <span>{% trans "Click: highlight chain. Double-click: open." %}</span>
+    </div>
+  </div>
+</div>
+{% include 'netbox_relationships/inc/graph_assets.html' %}
+{% endblock %}

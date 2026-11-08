@@ -1,0 +1,4 @@
+{% if node.url %}<a href="{{ node.url }}" class="nbr-box{% if node.state %} nbr-state-{{ node.state }}{% endif %}">{% else %}<span class="nbr-box{% if node.state %} nbr-state-{{ node.state }}{% endif %}">{% endif %}
+  {{ node.label }}
+  <small>{{ node.kind }}{% if node.state %} &middot; {{ node.state }}{% endif %}</small>
+{% if node.url %}</a>{% else %}</span>{% endif %}

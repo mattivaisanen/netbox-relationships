@@ -1,0 +1,39 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% load plugins %}
+{% load i18n %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">{% trans "Relationship" %}</h2>
+      <div class="card-body fs-5">
+        {{ object.source|linkify|placeholder }}
+        <span class="fw-semibold" style="color: #{{ object.type.color }}">{{ object.type.forward_label }}</span>
+        {{ object.target|linkify|placeholder }}
+        <div class="text-muted fs-6 mt-1">
+          {% trans "Read back" %}: {{ object.target|placeholder }} {{ object.type.reverse_label }} {{ object.source|placeholder }}
+        </div>
+      </div>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">{% trans "Type" %}</th><td>{{ object.type|linkify }}</td></tr>
+        <tr><th scope="row">{% trans "Source" %}</th><td>{{ object.source|linkify|placeholder }} <span class="text-muted">({{ object.source_type.name|bettertitle }})</span></td></tr>
+        <tr><th scope="row">{% trans "Target" %}</th><td>{{ object.target|linkify|placeholder }} <span class="text-muted">({{ object.target_type.name|bettertitle }})</span></td></tr>
+        <tr><th scope="row">{% trans "Status" %}</th><td>{% badge object.get_status_display bg_color=object.get_status_color %}</td></tr>
+        <tr><th scope="row">{% trans "Criticality" %}</th><td>{% badge object.get_criticality_display bg_color=object.get_criticality_color %}</td></tr>
+        <tr><th scope="row">{% trans "Impact on failure" %}</th><td>{% badge object.type.get_impact_display bg_color=object.type.get_impact_color %}</td></tr>
+        <tr><th scope="row">{% trans "Reason" %}</th><td>{{ object.description|placeholder }}</td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+    {% plugin_left_page object %}
+  </div>
+  <div class="col col-md-6">
+    {% include 'inc/panels/comments.html' %}
+    {% include 'inc/panels/custom_fields.html' %}
+    {% plugin_right_page object %}
+  </div>
+</div>
+{% plugin_full_width_page object %}
+{% endblock %}

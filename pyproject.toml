@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-relationships"
+version = "0.1.0"
+description = "Model what depends on what in NetBox: typed relationships between any objects, a dependency graph and impact analysis."
+requires-python = ">=3.10"
+license = "Apache-2.0"
+readme = "README.md"
+authors = [{ name = "Matti" }]
+# No runtime dependencies beyond NetBox (which brings Django). NetBox
+# versions are enforced at runtime by min_version in
+# netbox_relationships/__init__.py.
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["netbox_relationships*"]
+
+[tool.setuptools.package-data]
+netbox_relationships = [
+    "templates/netbox_relationships/*.html",
+    "templates/netbox_relationships/**/*.html",
+    "assets/*",
+]

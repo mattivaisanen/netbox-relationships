@@ -90,8 +90,9 @@ cluster hosts...). They can't be edited here; change the NetBox object
 instead and the link follows. Which kinds are on is set in
 [configuration.md](configuration.md#derived-links).
 
-Network cables only carry impact once **network tiers** are set (device
-roles from the top of the network down). Then a switch *uplinks to* the
+Network cables only carry impact once **network tiers** are set
+(**Relationships → Network Tiers**: device roles from the top of the
+network down). Then a switch *uplinks to* the
 switch above it, through any patch panels, and impact analysis follows
 the whole network. See [configuration.md](configuration.md#network-tiers).
 

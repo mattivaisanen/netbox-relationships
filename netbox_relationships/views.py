@@ -19,7 +19,7 @@ from .choices import ImpactChoices
 from .constants import COMMON_TYPES, MANUAL
 from .edges import rebuild
 from .graph import EDGE_FIELDS, key, parse_key, resolve
-from .models import EdgeIndex, LogicalService, Relationship, RelationshipType
+from .models import EdgeIndex, LogicalService, NetworkTier, Relationship, RelationshipType
 
 #
 # Relationship types
@@ -182,6 +182,49 @@ class LogicalServiceBulkDeleteView(generic.BulkDeleteView):
     queryset = LogicalService.objects.all()
     filterset = filtersets.LogicalServiceFilterSet
     table = tables.LogicalServiceTable
+
+
+#
+# Network tiers
+#
+
+@register_model_view(NetworkTier, 'list', path='', detail=False)
+class NetworkTierListView(generic.ObjectListView):
+    queryset = NetworkTier.objects.prefetch_related('roles', 'tags')
+    filterset = filtersets.NetworkTierFilterSet
+    filterset_form = forms.NetworkTierFilterForm
+    table = tables.NetworkTierTable
+    template_name = 'netbox_relationships/networktier_list.html'
+
+
+@register_model_view(NetworkTier)
+class NetworkTierView(generic.ObjectView):
+    queryset = NetworkTier.objects.prefetch_related('roles')
+
+
+@register_model_view(NetworkTier, 'add', detail=False)
+@register_model_view(NetworkTier, 'edit')
+class NetworkTierEditView(generic.ObjectEditView):
+    queryset = NetworkTier.objects.all()
+    form = forms.NetworkTierForm
+
+
+@register_model_view(NetworkTier, 'delete')
+class NetworkTierDeleteView(generic.ObjectDeleteView):
+    queryset = NetworkTier.objects.all()
+
+
+@register_model_view(NetworkTier, 'bulk_import', path='import', detail=False)
+class NetworkTierBulkImportView(generic.BulkImportView):
+    queryset = NetworkTier.objects.all()
+    model_form = forms.NetworkTierImportForm
+
+
+@register_model_view(NetworkTier, 'bulk_delete', path='delete', detail=False)
+class NetworkTierBulkDeleteView(generic.BulkDeleteView):
+    queryset = NetworkTier.objects.all()
+    filterset = filtersets.NetworkTierFilterSet
+    table = tables.NetworkTierTable
 
 
 #

@@ -17,7 +17,7 @@ PLUGINS_CONFIG = {
 | `default_depth` | `3` | Hops a graph shows when it opens. |
 | `max_depth` | `8` | Most hops any graph, impact analysis or API call may walk. |
 | `max_nodes` | `1000` | Objects collected before a result is cut short (and says so). |
-| `network_tiers` | `[]` | Device role slugs from the top of the network down, one list per tier. Turns network cables into uplinks. See [Network tiers](#network-tiers). |
+| `network_tiers` | `[]` | Device role slugs from the top of the network down, one list per tier. Turns network cables into uplinks. Not used while any tier exists under **Relationships → Network Tiers**. See [Network tiers](#network-tiers). |
 | `tier_endpoints` | `True` | With tiers set, devices whose role is in no tier sit below the last tier, so a server uplinks to its switch. |
 | `uplink_tag` | `'uplink'` | Interface tag that means "this device needs the far end of this cable". |
 | `downlink_tag` | `'downlink'` | Interface tag that means "the far end needs this device". |
@@ -61,7 +61,12 @@ The same rebuild runs as a NetBox system job every night.
 ## Network tiers
 
 Without tiers, a cable only says that two devices are connected, and
-carries no impact. With tiers, the plugin knows which end needs the other:
+carries no impact. With tiers, the plugin knows which end needs the other.
+
+The easiest way is **Relationships → Network Tiers** in the UI: add a tier
+per level of the network (level 1 at the top) and pick its device roles.
+Changes apply straight away. While any tier exists there, the setting below
+is not used. The setting does the same from `configuration.py`:
 
 ```python
 'network_tiers': [
@@ -96,6 +101,6 @@ Where tiers can't tell (two switches in the same tier, daisy-chained),
 tag the interface: `uplink` on the interface of the device that needs the
 far end, or `downlink` on the other side.
 
-Run `rebuild_relationship_index` (or **All links → Rebuild now**) after
-changing tiers. Later cable, role and tag changes update the links by
-themselves.
+After changing the setting, run `rebuild_relationship_index` (or **All
+links → Rebuild now**). Tiers changed in the UI, and later cable, role and
+tag changes, update the links by themselves.

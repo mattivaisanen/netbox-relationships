@@ -357,9 +357,12 @@ class IPPrefixProvider(Provider):
                 yield Edge(ip.pk, 'ipam.ipaddress', ip.pk, 'ipam.prefix', prefix_id, IN_PREFIX)
 
 
+#: The providers that read network cables (rerun when the tiers change).
+UPLINK_PROVIDERS = (DeviceUplinkProvider(), ChassisUplinkProvider())
+
 #: Every provider, in the order a rebuild runs them.
 PROVIDERS = (
     VMProvider(), ClusterHostProvider(), ServiceProvider(), PowerCableProvider(), PowerFeedProvider(),
-    CircuitProvider(), VirtualChassisProvider(), DeviceUplinkProvider(), ChassisUplinkProvider(),
+    CircuitProvider(), VirtualChassisProvider(), *UPLINK_PROVIDERS,
     LogicalParentProvider(), PlacementProvider(), PrefixVLANProvider(), IPPrefixProvider(),
 )

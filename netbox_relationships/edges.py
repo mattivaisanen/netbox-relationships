@@ -123,3 +123,15 @@ def rebuild():
                 counts[row.origin] = counts.get(row.origin, 0) + 1
     logger.info('Rebuilt the relationship index: %s', counts)
     return counts
+
+
+def refresh_network():
+    """
+    Rewrite every network cable link, after the tiers changed. Runs the two
+    uplink providers over all their owners; other links are left alone.
+    """
+    from .derived import UPLINK_PROVIDERS
+    with transaction.atomic():
+        for provider in UPLINK_PROVIDERS:
+            EdgeIndex.objects.filter(origin__in=provider.keys, owner_type=_ct(provider.owner)).delete()
+            EdgeIndex.objects.bulk_create(_derived_rows(provider), batch_size=BATCH)

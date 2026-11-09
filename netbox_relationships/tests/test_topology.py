@@ -12,7 +12,7 @@ from dcim.models import (
 
 from ..edges import rebuild
 from ..impact import analyse
-from ..models import EdgeIndex
+from ..models import EdgeIndex, NetworkTier
 from .utils import make_superuser
 
 
@@ -75,3 +75,12 @@ class UplinkTests(TestCase):
 
         self.assertEqual(states(self.d1), {'dist-pair': 'at_risk', 'acc': 'at_risk'})
         self.assertEqual(states(self.d1, self.d2), {'dist-pair': 'down', 'acc': 'down'})
+
+    def test_tiers_made_in_the_ui_win_over_the_setting(self):
+        # Turned upside down: access on top, so the chassis now needs the access switch.
+        with self.captureOnCommitCallbacks(execute=True):
+            for level, slug in ((1, 'access'), (2, 'distribution')):
+                tier = NetworkTier.objects.create(name=slug, slug=slug, level=level)
+                tier.roles.set([DeviceRole.objects.get(slug=slug)])
+        edge = EdgeIndex.objects.get(origin='cables')
+        self.assertEqual((edge.source_id, edge.target_id), (self.pair.pk, self.access.pk))

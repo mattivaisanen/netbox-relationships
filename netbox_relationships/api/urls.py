@@ -8,6 +8,7 @@ router = NetBoxRouter()
 router.register('relationship-types', views.RelationshipTypeViewSet)
 router.register('relationships', views.RelationshipViewSet)
 router.register('logical-services', views.LogicalServiceViewSet)
+router.register('network-tiers', views.NetworkTierViewSet)
 
 urlpatterns = [
     path('graph/', views.GraphView.as_view(), name='graph'),

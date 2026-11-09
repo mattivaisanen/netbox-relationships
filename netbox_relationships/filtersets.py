@@ -2,13 +2,14 @@ import django_filters
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
+from dcim.models import DeviceRole
 from netbox.filtersets import OrganizationalModelFilterSet, PrimaryModelFilterSet
 from tenancy.filtersets import TenancyFilterSet
 from utilities.filters import ContentTypeFilter
 
 from .choices import CategoryChoices, CriticalityChoices, ImpactChoices, ServiceKindChoices, StatusChoices
 from .graph import parse_key
-from .models import LogicalService, Relationship, RelationshipType
+from .models import LogicalService, NetworkTier, Relationship, RelationshipType
 
 
 class RelationshipTypeFilterSet(OrganizationalModelFilterSet):
@@ -74,6 +75,21 @@ class LogicalServiceFilterSet(TenancyFilterSet, PrimaryModelFilterSet):
     class Meta:
         model = LogicalService
         fields = ('id', 'name', 'link', 'description')
+
+    def search(self, queryset, name, value):
+        if not value.strip():
+            return queryset
+        return queryset.filter(Q(name__icontains=value) | Q(description__icontains=value))
+
+
+class NetworkTierFilterSet(OrganizationalModelFilterSet):
+    role_id = django_filters.ModelMultipleChoiceFilter(
+        field_name='roles', queryset=DeviceRole.objects.all(), label=_('Device role (ID)'),
+    )
+
+    class Meta:
+        model = NetworkTier
+        fields = ('id', 'name', 'slug', 'level', 'description')
 
     def search(self, queryset, name, value):
         if not value.strip():

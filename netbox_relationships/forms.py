@@ -5,7 +5,7 @@ from django.db.models import Count, Q
 from django.utils.translation import gettext_lazy as _
 
 from core.models import ObjectType
-from dcim.models import Device
+from dcim.models import Device, DeviceRole
 from netbox.forms import (
     OrganizationalModelBulkEditForm, OrganizationalModelFilterSetForm, OrganizationalModelForm,
     OrganizationalModelImportForm, PrimaryModelBulkEditForm, PrimaryModelFilterSetForm, PrimaryModelForm,
@@ -16,8 +16,8 @@ from tenancy.models import Tenant
 from utilities.forms import BOOLEAN_WITH_BLANK_CHOICES, add_blank_choice
 from utilities.forms.fields import (
     ColorField, CommentField, ContentTypeMultipleChoiceField, CSVChoiceField, CSVContentTypeField,
-    CSVModelChoiceField, DynamicModelChoiceField, DynamicModelMultipleChoiceField, GenericObjectChoiceField,
-    SlugField, TagFilterField,
+    CSVModelChoiceField, CSVModelMultipleChoiceField, DynamicModelChoiceField, DynamicModelMultipleChoiceField,
+    GenericObjectChoiceField, SlugField, TagFilterField,
 )
 from utilities.forms.mixins import GenericObjectFormMixin
 from utilities.forms.rendering import FieldSet
@@ -26,7 +26,7 @@ from utilities.forms.widgets import BulkEditNullBooleanSelect
 from .choices import (
     CardinalityChoices, CategoryChoices, CriticalityChoices, ImpactChoices, ServiceKindChoices, StatusChoices,
 )
-from .models import LogicalService, Relationship, RelationshipType
+from .models import LogicalService, NetworkTier, Relationship, RelationshipType
 
 
 def linkable_types():
@@ -456,3 +456,50 @@ class RelationshipAddManyForm(forms.Form):
         if data.get('redundant') and not data.get('group'):
             self.add_error('group', _('Give the group a name.'))
         return data
+
+
+#
+# Network tiers
+#
+
+class NetworkTierForm(OrganizationalModelForm):
+    slug = SlugField()
+    roles = DynamicModelMultipleChoiceField(label=_('Device roles'), queryset=DeviceRole.objects.all(), required=False)
+
+    fieldsets = (
+        FieldSet('name', 'slug', 'level', 'roles', 'description', 'tags', name=_('Network tier')),
+    )
+
+    class Meta:
+        model = NetworkTier
+        fields = ('name', 'slug', 'level', 'roles', 'description', 'owner', 'comments', 'tags')
+
+    def clean(self):
+        super().clean()
+        # A role in two tiers would make cable directions ambiguous.
+        roles = self.cleaned_data.get('roles') or []
+        taken = NetworkTier.objects.exclude(pk=self.instance.pk).filter(roles__in=roles).values_list(
+            'roles__name', 'name').distinct()
+        taken = [(role, tier) for role, tier in taken if role in {r.name for r in roles}]
+        if taken:
+            raise forms.ValidationError({'roles': _('Already in another tier: {list}').format(
+                list=', '.join(f'{role} ({tier})' for role, tier in taken))})
+        return self.cleaned_data
+
+
+class NetworkTierImportForm(OrganizationalModelImportForm):
+    slug = SlugField()
+    roles = CSVModelMultipleChoiceField(
+        label=_('Device roles'), queryset=DeviceRole.objects.all(), to_field_name='slug', required=False,
+        help_text=_('Role slugs, comma separated'),
+    )
+
+    class Meta:
+        model = NetworkTier
+        fields = ('name', 'slug', 'level', 'roles', 'description', 'owner', 'comments', 'tags')
+
+
+class NetworkTierFilterForm(OrganizationalModelFilterSetForm):
+    model = NetworkTier
+    fieldsets = (FieldSet('q', 'filter_id', 'tag'),)
+    tag = TagFilterField(model)

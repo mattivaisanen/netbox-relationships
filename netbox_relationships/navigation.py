@@ -47,6 +47,12 @@ menu = PluginMenu(
         )),
         (_('Setup'), (
             PluginMenuItem(
+                link='plugins:netbox_relationships:networktier_list',
+                link_text=_('Network Tiers'),
+                permissions=['netbox_relationships.view_networktier'],
+                buttons=_add('plugins:netbox_relationships:networktier_add', 'netbox_relationships.add_networktier'),
+            ),
+            PluginMenuItem(
                 link='plugins:netbox_relationships:relationshiptype_list',
                 link_text=_('Relationship Types'),
                 permissions=['netbox_relationships.view_relationshiptype'],

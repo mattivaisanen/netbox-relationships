@@ -1,0 +1,9 @@
+{% extends 'generic/object_list.html' %}
+{% load i18n %}
+
+{% block content %}
+  <div class="alert alert-info">
+    {% blocktrans %}Network tiers order device roles from the top of the network (level 1) down. A cable between devices in two tiers becomes "uplinks to": the lower one needs the one above. Devices in the same tier are peers; devices whose role is in no tier sit below the last tier. Changing a tier updates the network links straight away. While any tier exists here, the <code>network_tiers</code> setting is not used.{% endblocktrans %}
+  </div>
+  {{ block.super }}
+{% endblock %}

@@ -10,6 +10,7 @@ tokens and permissions.
 | `relationship-types/` | Relationship types |
 | `relationships/` | Relationships |
 | `logical-services/` | Logical services |
+| `network-tiers/` | Network tiers (`name`, `slug`, `level`, `roles` as device role IDs) |
 
 These support the usual list, get, create, update, delete, bulk operations
 and filters. Relationships filter by `type` (slug), `type_id`, `status`,

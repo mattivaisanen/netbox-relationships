@@ -1,0 +1,38 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% load plugins %}
+{% load i18n %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">{% trans "Network Tier" %}</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">{% trans "Name" %}</th><td>{{ object.name }}</td></tr>
+        <tr><th scope="row">{% trans "Level" %}</th><td>{{ object.level }}</td></tr>
+        <tr><th scope="row">{% trans "Description" %}</th><td>{{ object.description|placeholder }}</td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+    {% include 'inc/panels/comments.html' %}
+    {% plugin_left_page object %}
+  </div>
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">{% trans "Device Roles" %}</h2>
+      <ul class="list-group list-group-flush">
+        {% for role in object.roles.all %}
+          <li class="list-group-item d-flex justify-content-between">
+            <a href="{{ role.get_absolute_url }}">{{ role }}</a>
+            <a href="{% url 'dcim:device_list' %}?role_id={{ role.pk }}" class="text-muted">{% trans "Devices" %}</a>
+          </li>
+        {% empty %}
+          <li class="list-group-item text-muted">{% trans "No roles yet." %}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% plugin_right_page object %}
+  </div>
+</div>
+{% endblock %}

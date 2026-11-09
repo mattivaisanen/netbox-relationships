@@ -7,8 +7,8 @@ module turns those paths into links between network nodes:
 
 - A node is a device, or its virtual chassis when it is a member of one
   (a stack or a chassis pair acts as one switch).
-- Each node gets a tier from its device role (the `network_tiers` setting,
-  top of the network first). Devices with other roles are endpoints, below
+- Each node gets a tier from its device role (Network Tiers in the UI, or
+  the `network_tiers` setting; top of the network first). Devices with other roles are endpoints, below
   the last tier. A circuit sits above every tier.
 - Between two nodes, the one in the lower tier "uplinks to" the one in the
   higher tier: a hard dependency. Nodes in the same tier are peers, and
@@ -46,7 +46,17 @@ def _ct_id(label):
 
 
 def tiers():
-    """{role slug: tier number}, 0 at the top. Empty when not configured."""
+    """
+    {role slug: tier number}, 0 at the top. Network tiers made in the UI
+    win; without any, the `network_tiers` setting is used. Empty when
+    neither is set.
+    """
+    NetworkTier = _model('netbox_relationships.networktier')
+    rows = NetworkTier.objects.order_by('level').values_list('level', 'roles__slug')
+    if rows.exists():
+        levels = sorted({level for level, _slug in rows})
+        number = {level: i for i, level in enumerate(levels)}
+        return {slug: number[level] for level, slug in rows if slug}
     found = {}
     for number, entry in enumerate(settings.get('network_tiers') or []):
         for slug in ([entry] if isinstance(entry, str) else entry):

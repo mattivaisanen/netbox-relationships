@@ -1,7 +1,9 @@
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
 
-from netbox.api.fields import ChoiceField, ContentTypeField
+from dcim.api.serializers import DeviceRoleSerializer
+from dcim.models import DeviceRole
+from netbox.api.fields import ChoiceField, ContentTypeField, SerializedPKRelatedField
 from netbox.api.gfk_fields import GFKSerializerField
 from netbox.api.serializers import NetBoxModelSerializer
 from tenancy.api.serializers import TenantSerializer
@@ -10,7 +12,7 @@ from ..choices import (
     CardinalityChoices, CategoryChoices, CriticalityChoices, ImpactChoices, ServiceKindChoices, StatusChoices,
 )
 from ..forms import linkable_types
-from ..models import LogicalService, Relationship, RelationshipType
+from ..models import LogicalService, NetworkTier, Relationship, RelationshipType
 
 
 class RelationshipTypeSerializer(NetBoxModelSerializer):
@@ -66,3 +68,17 @@ class LogicalServiceSerializer(NetBoxModelSerializer):
             'link', 'description', 'owner', 'comments', 'tags', 'custom_fields', 'created', 'last_updated',
         )
         brief_fields = ('id', 'url', 'display', 'name', 'kind', 'description')
+
+
+class NetworkTierSerializer(NetBoxModelSerializer):
+    roles = SerializedPKRelatedField(
+        queryset=DeviceRole.objects.all(), serializer=DeviceRoleSerializer, nested=True, required=False, many=True,
+    )
+
+    class Meta:
+        model = NetworkTier
+        fields = (
+            'id', 'url', 'display_url', 'display', 'name', 'slug', 'level', 'roles', 'description', 'owner',
+            'comments', 'tags', 'custom_fields', 'created', 'last_updated',
+        )
+        brief_fields = ('id', 'url', 'display', 'name', 'slug', 'level', 'description')

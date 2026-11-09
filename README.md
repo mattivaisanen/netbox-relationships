@@ -25,8 +25,8 @@ Use it to answer two questions:
   machines on clusters, services on devices, cables, power feeds, circuits
   and virtual chassis members. Rack placement and IP/prefix links can be
   switched on.
-- **Your network's shape from its cables.** List your device roles from
-  the top of the network down, and every cable (through patch panels)
+- **Your network's shape from its cables.** Put your device roles in
+  network tiers, from the top of the network down, and every cable (through patch panels)
   becomes "uplinks to" the switch above. Stacks and switch pairs count as
   one. No links to type in by hand.
 - **Redundancy.** Two uplinks, the hosts of a cluster or two database

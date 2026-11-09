@@ -18,7 +18,7 @@ How the plugin is put together, and why.
 
 | Module | Responsibility |
 |---|---|
-| `models.py` | `RelationshipType`, `Relationship`, `LogicalService` and the `EdgeIndex` table. |
+| `models.py` | `RelationshipType`, `Relationship`, `LogicalService`, `NetworkTier` and the `EdgeIndex` table. |
 | `validation.py` | Checks run by `Relationship.clean()`: allowed types, self links, duplicates, cardinality, loops. |
 | `derived.py` | Providers that read links from NetBox data (VM → cluster, cables, power, ...). Each one lists the models it watches. |
 | `topology.py` | Turns network cable paths into uplinks, peer links or plain connections, using the `network_tiers` setting. |
@@ -76,7 +76,10 @@ placeholders with no name.
 ## Network topology
 
 NetBox keeps a `CablePath` for every interface: the far end, through any
-patch panels. `topology.Links` reads those paths for a set of *nodes* (a
+patch panels. Tiers come from `NetworkTier` rows when any exist, else from
+the `network_tiers` setting. Saving a tier, or changing its roles, reruns
+the two uplink providers over everything once the transaction commits
+(`edges.refresh_network`). `topology.Links` reads those paths for a set of *nodes* (a
 device, or its virtual chassis if it is a member), and decides each
 link's direction from the device roles' tiers, with `uplink`/`downlink`
 interface tags overriding.

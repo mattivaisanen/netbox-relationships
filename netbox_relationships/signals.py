@@ -8,17 +8,20 @@ Keeps the edge index current. Connected from NetBoxRelationshipsConfig.ready().
   it affects.
 - Deleting any object first deletes its relationships (one by one, so the
   change log records them) and every index row that touches it.
+- Saving or deleting a network tier, or changing its roles, rewrites every
+  network cable link once the change is committed.
 - After `manage.py migrate` the whole index is rebuilt, so a new install or
   an upgrade shows every link straight away.
 """
 import logging
 
 from django.apps import apps
-from django.db.models.signals import post_delete, post_migrate, post_save, pre_delete
+from django.db import transaction
+from django.db.models.signals import m2m_changed, post_delete, post_migrate, post_save, pre_delete
 
 from . import edges
 from .derived import PROVIDERS
-from .models import EdgeIndex, LogicalService, Relationship, RelationshipType
+from .models import EdgeIndex, LogicalService, NetworkTier, Relationship, RelationshipType
 
 logger = logging.getLogger('netbox_relationships.signals')
 
@@ -41,6 +44,25 @@ def _relationship_deleted(sender, instance, **kwargs):
 def _type_saved(sender, instance, created, **kwargs):
     if not created:
         edges.sync_type(instance)
+
+
+def _tiers_changed(sender, **kwargs):
+    """Tiers or their roles changed: redo the network links once, after commit."""
+    if kwargs.get('action', 'post_').startswith('pre_'):
+        return
+    connection = transaction.get_connection()
+    if getattr(connection, '_nbr_network_pending', False):
+        return
+    connection._nbr_network_pending = True
+
+    def run():
+        connection._nbr_network_pending = False
+        try:
+            edges.refresh_network()
+        except Exception:
+            logger.exception('Could not refresh network links after a tier change')
+
+    transaction.on_commit(run)
 
 
 def _object_deleting(sender, instance, **kwargs):
@@ -79,6 +101,9 @@ def connect():
     post_delete.connect(_relationship_deleted, sender=Relationship, dispatch_uid='nbr_relationship_deleted')
     post_save.connect(_type_saved, sender=RelationshipType, dispatch_uid='nbr_type_saved')
     pre_delete.connect(_object_deleting, dispatch_uid='nbr_object_deleting')
+    post_save.connect(_tiers_changed, sender=NetworkTier, dispatch_uid='nbr_tier_saved')
+    post_delete.connect(_tiers_changed, sender=NetworkTier, dispatch_uid='nbr_tier_deleted')
+    m2m_changed.connect(_tiers_changed, sender=NetworkTier.roles.through, dispatch_uid='nbr_tier_roles')
 
     for provider in PROVIDERS:
         for label, owners_of in provider.watched():

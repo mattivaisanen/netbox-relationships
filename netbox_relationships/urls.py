@@ -19,4 +19,6 @@ urlpatterns = [
     path('types/<int:pk>/', include(get_model_urls('netbox_relationships', 'relationshiptype'))),
     path('services/', include(get_model_urls('netbox_relationships', 'logicalservice', detail=False))),
     path('services/<int:pk>/', include(get_model_urls('netbox_relationships', 'logicalservice'))),
+    path('tiers/', include(get_model_urls('netbox_relationships', 'networktier', detail=False))),
+    path('tiers/<int:pk>/', include(get_model_urls('netbox_relationships', 'networktier'))),
 ]

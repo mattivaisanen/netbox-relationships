@@ -5,6 +5,8 @@ The plugin's models.
 - Relationship: one link, entered by hand, between any two objects.
 - LogicalService: a business service, application or external service,
   for things NetBox has no object for.
+- NetworkTier: a level of the network (core, edge...) made of device roles;
+  decides which end of a network cable needs the other.
 - EdgeIndex: every link in one narrow table, hand-made and derived from
   NetBox's own data. Internal: it is what graphs and impact analysis read.
 """
@@ -222,6 +224,34 @@ class LogicalService(ContactsMixin, PrimaryModel):
                 raise ValidationError({'parent': _('A service cannot be part of itself.')})
             seen.add(node.pk)
             node = node.parent
+
+
+class NetworkTier(OrganizationalModel):
+    """
+    One level of the network, made of device roles. A cable between devices
+    in two tiers becomes "uplinks to": the device in the lower tier (higher
+    level number) needs the one above. When any tier exists, these replace
+    the `network_tiers` setting.
+    """
+    level = models.PositiveSmallIntegerField(
+        verbose_name=_('level'), unique=True,
+        help_text=_('Position from the top of the network: 1 is the top. Lower tiers have higher numbers.'),
+    )
+    roles = models.ManyToManyField(
+        to='dcim.DeviceRole', related_name='+', blank=True, verbose_name=_('device roles'),
+        help_text=_('Devices with these roles are in this tier. A role can be in one tier only.'),
+    )
+
+    class Meta:
+        ordering = ('level',)
+        verbose_name = _('network tier')
+        verbose_name_plural = _('network tiers')
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse('plugins:netbox_relationships:networktier', args=[self.pk])
 
 
 class EdgeIndex(models.Model):

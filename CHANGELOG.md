@@ -4,9 +4,10 @@
 
 New:
 
-- Network tiers: list device roles from the top of the network down
-  (`network_tiers`), and network cables become "uplinks to" the device in
-  the tier above, with impact. Cables are followed through patch panels.
+- Network tiers: order device roles from the top of the network down
+  (**Relationships → Network Tiers**, or the `network_tiers` setting), and
+  network cables become "uplinks to" the device in the tier above, with
+  impact. Cables are followed through patch panels.
   Devices in the same tier are peers. Interface tags `uplink` and
   `downlink` set the direction by hand.
 - Virtual chassis members count as their chassis: the chassis has the

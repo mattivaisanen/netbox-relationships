@@ -1,0 +1,68 @@
+{% extends 'generic/_base.html' %}
+{% load i18n helpers form_helpers %}
+
+{% block title %}{% trans "Add relationships" %}{% endblock %}
+
+{% block content %}
+<form method="post" class="card" data-nbr-addmany>
+  {% csrf_token %}
+  <input type="hidden" name="object" value="{{ object_key }}">
+  <input type="hidden" name="return_url" value="{{ return_url }}">
+  <div class="card-body">
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger">{% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}</div>
+    {% endif %}
+
+    <h2 class="h3 mb-3">{{ obj }} <span class="text-muted fw-normal fs-5">{{ obj|meta:"verbose_name"|capfirst }}</span></h2>
+
+    <div class="mb-3">
+      {% for radio in form.direction %}
+        <input type="radio" class="btn-check" name="direction" id="{{ radio.id_for_label }}" value="{{ radio.data.value }}"{% if radio.data.selected %} checked{% endif %}>
+        <label class="btn btn-outline-primary me-2" for="{{ radio.id_for_label }}">
+          <i class="mdi {% if radio.data.value == 'needs' %}mdi-arrow-down-bold{% else %}mdi-arrow-up-bold{% endif %}"></i> {{ obj }} {{ radio.choice_label }}
+        </label>
+      {% endfor %}
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">{% render_field form.target_type %}</div>
+      <div class="col-md-8">
+        {% if target_ct %}{% render_field form.targets %}{% else %}<p class="text-muted mt-4">{% trans "Pick an object type first." %}</p>{% endif %}
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">{% render_field form.type %}</div>
+      <div class="col-md-8">
+        <div class="form-label">{% trans "If what is needed fails, what needs it…" %}</div>
+        {% for radio in form.impact %}
+          <div class="form-check form-check-inline">
+            <input type="radio" class="form-check-input" name="impact" id="{{ radio.id_for_label }}" value="{{ radio.data.value }}"{% if radio.data.selected %} checked{% endif %}>
+            <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="mb-3">
+      {% render_field form.redundant %}
+      <div class="row g-3" data-nbr-group>
+        <div class="col-md-4">{% render_field form.group %}</div>
+        <div class="col-md-4">{% render_field form.group_min %}</div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-4">{% render_field form.label %}</div>
+      <div class="col-md-4">{% render_field form.status %}</div>
+      <div class="col-md-4">{% render_field form.criticality %}</div>
+      <div class="col-12">{% render_field form.description %}</div>
+    </div>
+  </div>
+  <div class="card-footer text-end">
+    <a href="{{ return_url }}" class="btn btn-outline-secondary">{% trans "Cancel" %}</a>
+    <button type="submit" class="btn btn-primary"{% if not target_ct %} disabled{% endif %}>{% trans "Add" %}</button>
+  </div>
+</form>
+<script src="{% url 'plugins:netbox_relationships:asset' name='addmany.js' %}?v={{ version }}"></script>
+{% endblock %}

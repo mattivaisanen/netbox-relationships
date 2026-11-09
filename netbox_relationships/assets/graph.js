@@ -18,6 +18,7 @@
     service: ['#e3f4f1', '#1f7a6b', '#17302c', '#5bbfab'],
     vm: ['#ffffff', '#5b6475', '#22262e', '#9aa3b2'],
     cluster: ['#ffffff', '#1d2330', '#22262e', '#d0d5dd'],
+    chassis: ['#f2f7fc', '#3b82c4', '#1c2633', '#7fb1e0'],
     device: ['#f5f6f8', '#5b6475', '#2a2e36', '#9aa3b2'],
     circuit: ['#fff4e5', '#b26a00', '#33281a', '#e0a24a'],
     power: ['#fff1e8', '#e65100', '#36231a', '#ff8a50'],
@@ -51,8 +52,18 @@
           'text-background-opacity': 0.9, 'text-background-padding': 2, 'text-rotation': 'autorotate'
         }
       },
+      {
+        // A virtual chassis drawn as a box around its members.
+        selector: ':parent',
+        style: {
+          'shape': 'round-rectangle', 'text-valign': 'top', 'text-halign': 'center', 'text-margin-y': -4,
+          'padding': 14, 'border-style': 'dashed', 'border-width': 1.5, 'font-weight': 600,
+          'background-opacity': 0.35
+        }
+      },
       {selector: 'edge[?symmetric]', style: {'target-arrow-shape': 'none'}},
-      {selector: 'edge[origin = "netbox"]', style: {'line-style': 'dotted'}},
+      {selector: 'edge[group != ""]', style: {'line-style': 'solid', 'width': 2.5, 'source-arrow-shape': 'none'}},
+      {selector: 'edge[origin = "netbox"][group = ""]', style: {'line-style': 'dotted'}},
       {selector: 'edge[status = "planned"]', style: {'line-style': 'dashed', 'line-dash-pattern': [8, 5]}},
       {selector: 'edge[impact = "hard"][origin = "manual"]', style: {'width': 2.5}},
       {selector: '.nbr-faded', style: {'opacity': 0.18}},
@@ -69,38 +80,95 @@
   }
 
   /*
-   * Positions for the layered layout. Walks out from the root objects:
-   * following an edge source -> target goes one row down, against it one
-   * row up, a symmetric edge stays on the next row down. Rows are centred.
+   * Positions for the layered layout, top to bottom: what needs something
+   * sits above it. Members of a virtual chassis are drawn inside its box and
+   * take part through the box.
+   *
+   * 1. Layers: each node goes one row below the lowest thing that needs it
+   *    (longest path), so chains read straight down. Peer and other
+   *    symmetric links don't set rows; peers end up side by side.
+   * 2. Order within a row: a few sweeps that move each node towards the
+   *    average position of its neighbours, which removes most crossings.
+   * 3. Rows are centred; a box is as wide as its members.
    */
-  function layered(data) {
-    var level = {};
-    var out = {}, inc = {};
+  var NODE_W = 190, ROW_H = 130, MEMBER_W = 180;
+
+  function layered(data, parentOf) {
+    var top = data.nodes.filter(function (n) { return !parentOf[n.id]; }).map(function (n) { return n.id; });
+    var lift = function (id) { return parentOf[id] || id; };
+    var down = {}, up = {}, peers = {};
+    top.forEach(function (id) { down[id] = []; up[id] = []; peers[id] = []; });
     data.edges.forEach(function (e) {
-      (out[e.source] = out[e.source] || []).push(e);
-      (inc[e.target] = inc[e.target] || []).push(e);
+      var a = lift(e.source), b = lift(e.target);
+      if (a === b || !(a in down) || !(b in down)) { return; }
+      if (e.symmetric) { peers[a].push(b); peers[b].push(a); return; }
+      down[a].push(b);
+      up[b].push(a);
     });
-    var queue = data.roots.slice();
-    queue.forEach(function (r) { level[r] = 0; });
-    while (queue.length) {
-      var id = queue.shift();
-      (out[id] || []).forEach(function (e) {
-        if (!(e.target in level)) { level[e.target] = level[id] + 1; queue.push(e.target); }
+
+    // 1. Longest-path layers, guarded against loops.
+    var level = {};
+    top.forEach(function (id) { level[id] = 0; });
+    for (var round = 0; round < top.length; round++) {
+      var moved = false;
+      top.forEach(function (id) {
+        down[id].forEach(function (t) {
+          if (level[t] < level[id] + 1 && level[id] + 1 < top.length) { level[t] = level[id] + 1; moved = true; }
+        });
       });
-      (inc[id] || []).forEach(function (e) {
-        if (!(e.source in level)) { level[e.source] = level[id] + (e.symmetric ? 1 : -1); queue.push(e.source); }
-      });
+      if (!moved) { break; }
     }
-    var rows = {};
-    data.nodes.forEach(function (n) {
-      var l = n.id in level ? level[n.id] : 0;
-      (rows[l] = rows[l] || []).push(n.id);
+    // A node with only peer links joins its peer's row.
+    top.forEach(function (id) {
+      if (!down[id].length && !up[id].length && peers[id].length) { level[id] = level[peers[id][0]]; }
     });
+
+    var rows = {};
+    top.forEach(function (id) { (rows[level[id]] = rows[level[id]] || []).push(id); });
+    var keys = Object.keys(rows).map(Number).sort(function (a, b) { return a - b; });
+    var width = function (id) { return Math.max(1, (data.children[id] || []).length) * (data.children[id] ? MEMBER_W : NODE_W); };
+
+    // 2. Barycenter sweeps, down then up.
+    var order = {};
+    var place = function () {
+      keys.forEach(function (k) { rows[k].forEach(function (id, i) { order[id] = i; }); });
+    };
+    place();
+    var mean = function (list) {
+      var known = list.filter(function (id) { return id in order; });
+      if (!known.length) { return null; }
+      return known.reduce(function (sum, id) { return sum + order[id]; }, 0) / known.length;
+    };
+    for (var sweep = 0; sweep < 4; sweep++) {
+      var seq = sweep % 2 ? keys.slice().reverse() : keys;
+      seq.forEach(function (k) {
+        var scored = rows[k].map(function (id) {
+          var m = mean(sweep % 2 ? down[id].concat(peers[id]) : up[id].concat(peers[id]));
+          return {id: id, score: m === null ? order[id] : m};
+        });
+        scored.sort(function (a, b) { return a.score - b.score; });
+        rows[k] = scored.map(function (x) { return x.id; });
+      });
+      place();
+    }
+
+    // 3. Coordinates.
     var positions = {};
-    Object.keys(rows).forEach(function (l) {
-      var ids = rows[l];
-      ids.forEach(function (id, i) {
-        positions[id] = {x: (i - (ids.length - 1) / 2) * 200, y: Number(l) * 120};
+    keys.forEach(function (k, row) {
+      var total = rows[k].reduce(function (sum, id) { return sum + width(id); }, 0);
+      var x = -total / 2;
+      rows[k].forEach(function (id) {
+        var w = width(id);
+        var cx = x + w / 2;
+        var members = data.children[id];
+        if (members) {
+          members.forEach(function (m, i) {
+            positions[m] = {x: cx + (i - (members.length - 1) / 2) * MEMBER_W, y: row * ROW_H};
+          });
+        } else {
+          positions[id] = {x: cx, y: row * ROW_H};
+        }
+        x += w;
       });
     });
     return positions;
@@ -117,16 +185,36 @@
       };
     }
     // Layered: what an object needs sits below it, what needs it above.
-    return {name: 'preset', positions: layered(data), fit: true, padding: 30, animate: false};
+    return {name: 'preset', positions: layered(data, data.parentOf), fit: true, padding: 30, animate: false};
   }
 
+  /*
+   * Cytoscape elements. A virtual chassis and its members become a box with
+   * the members inside, instead of a node with "runs on" links to each.
+   * Fills data.parentOf and data.children for the layout.
+   */
   function elements(data) {
+    var ids = {};
+    data.nodes.forEach(function (n) { ids[n.id] = true; });
+    data.parentOf = {};
+    data.children = {};
+    var edges = data.edges.filter(function (e) {
+      if (e.kind === 'virtual_chassis' && ids[e.source] && ids[e.target] && !data.parentOf[e.target]) {
+        data.parentOf[e.target] = e.source;
+        (data.children[e.source] = data.children[e.source] || []).push(e.target);
+        return false;
+      }
+      return true;
+    });
     var nodes = data.nodes.map(function (n) {
       var display = n.label + (n.kind ? '\n' + n.kind : '');
-      return {data: Object.assign({}, n, {display: display})};
+      var extra = {display: display};
+      if (data.parentOf[n.id]) { extra.parent = data.parentOf[n.id]; extra.display = n.label; }
+      return {data: Object.assign({}, n, extra)};
     });
-    var edges = data.edges.map(function (e) {
-      return {data: Object.assign({}, e, {color: '#' + (e.color || '6b7690')})};
+    edges = edges.map(function (e) {
+      var label = e.label + (e.link_count > 1 ? ' \u00d7' + e.link_count : '') + (e.note && e.origin === 'manual' ? ': ' + e.note : '');
+      return {data: Object.assign({}, e, {color: '#' + (e.color || '6b7690'), label: label, group: e.group || ''})};
     });
     return nodes.concat(edges);
   }

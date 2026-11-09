@@ -1,5 +1,5 @@
 """
-Serves the graph's JavaScript and CSS (Cytoscape.js and graph.js) from the
+Serves the JavaScript and CSS (Cytoscape.js, graph.js, addmany.js) from the
 plugin's own folder.
 
 They are not Django static files on purpose: static files only reach the
@@ -19,6 +19,7 @@ FILES = {
     'cytoscape.min.js': 'text/javascript',
     'graph.js': 'text/javascript',
     'graph.css': 'text/css',
+    'addmany.js': 'text/javascript',
 }
 
 

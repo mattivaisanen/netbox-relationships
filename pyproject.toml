@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "netbox-relationships"
-version = "0.1.0"
+version = "0.2.0"
 description = "Model what depends on what in NetBox: typed relationships between any objects, a dependency graph and impact analysis."
 requires-python = ">=3.10"
 license = "Apache-2.0"

@@ -9,28 +9,39 @@ to refresh: which saved or deleted objects change which owners' edges
 
 Each edge has an EdgeSpec: its settings key (PLUGINS_CONFIG 'derived'),
 labels, impact and colour. One provider can produce more than one kind:
-cables give "connects to" for network cables and "powered by" for power.
+network cables give "uplinks to", "is a peer of" or "connects to"
+(topology.py decides which).
 """
 from collections import namedtuple
 
 from django.apps import apps
 from django.contrib.contenttypes.models import ContentType
+from django.utils.translation import ngettext
 
+from . import topology
 from .choices import ImpactChoices
 
 EdgeSpec = namedtuple('EdgeSpec', 'key label reverse_label impact symmetric color')
 
-#: (owner pk, source model, source pk, target model, target pk, spec)
-Edge = namedtuple('Edge', 'owner_id source_model source_id target_model target_id spec')
+#: (owner pk, source model, source pk, target model, target pk, spec), plus
+#: optional redundancy group (edges from one source with the same group back
+#: each other up; the source needs `group_min` of them), the number of
+#: physical links folded into the edge, and a note on where it comes from.
+Edge = namedtuple(
+    'Edge', 'owner_id source_model source_id target_model target_id spec group group_min link_count note',
+    defaults=('', 1, 1, ''),
+)
 
 VM_RUNS_ON = EdgeSpec('vm_cluster', 'runs on', 'hosts', ImpactChoices.HARD, False, '6b7690')
-CLUSTER_ON_HOST = EdgeSpec('cluster_hosts', 'runs on', 'hosts', ImpactChoices.SOFT, False, '6b7690')
+CLUSTER_ON_HOST = EdgeSpec('cluster_hosts', 'runs on', 'hosts', ImpactChoices.HARD, False, '6b7690')
 SERVICE_ON = EdgeSpec('service_parent', 'runs on', 'hosts', ImpactChoices.HARD, False, '1f7a6b')
 CONNECTS = EdgeSpec('cables', 'connects to', 'connects to', ImpactChoices.NONE, True, '9aa3b2')
+UPLINK = EdgeSpec('cables', 'uplinks to', 'is the uplink of', ImpactChoices.HARD, False, '3b82c4')
+PEER = EdgeSpec('cables', 'is a peer of', 'is a peer of', ImpactChoices.NONE, True, '607d8b')
 POWERED_BY = EdgeSpec('power', 'is powered by', 'powers', ImpactChoices.HARD, False, 'e65100')
 FED_BY = EdgeSpec('power', 'is fed by', 'feeds', ImpactChoices.HARD, False, 'e65100')
 TERMINATES = EdgeSpec('circuits', 'terminates at', 'is a termination of', ImpactChoices.NONE, False, '9aa3b2')
-VC_MEMBER = EdgeSpec('virtual_chassis', 'is a member of', 'has member', ImpactChoices.NONE, False, '607d8b')
+VC_RUNS_ON = EdgeSpec('virtual_chassis', 'runs on', 'is a member of', ImpactChoices.HARD, False, '607d8b')
 CONSISTS_OF = EdgeSpec('logical_parent', 'consists of', 'is part of', ImpactChoices.HARD, False, '6b4bb8')
 LOCATED_IN = EdgeSpec('placement', 'is located in', 'contains', ImpactChoices.NONE, False, 'b0bec5')
 IN_PREFIX = EdgeSpec('ip_prefix', 'is in', 'contains', ImpactChoices.NONE, False, 'b0bec5')
@@ -84,15 +95,15 @@ class VMProvider(Provider):
 
 class ClusterHostProvider(Provider):
     """
-    A cluster runs on each of its devices. Soft: losing one host degrades
-    the cluster, it doesn't take it down.
+    A cluster runs on each of its devices. The hosts form one redundancy
+    group: losing one leaves the cluster at risk, losing all takes it down.
     """
     owner = 'dcim.device'
     specs = (CLUSTER_ON_HOST,)
 
     def build(self, ids=None):
         for pk, cluster_id in self.owners(ids).filter(cluster__isnull=False).values_list('pk', 'cluster_id'):
-            yield Edge(pk, 'virtualization.cluster', cluster_id, 'dcim.device', pk, CLUSTER_ON_HOST)
+            yield Edge(pk, 'virtualization.cluster', cluster_id, 'dcim.device', pk, CLUSTER_ON_HOST, group='hosts')
 
 
 class ServiceProvider(Provider):
@@ -108,21 +119,18 @@ class ServiceProvider(Provider):
                 yield Edge(pk, 'ipam.service', pk, parent_model._meta.label_lower, parent_id, SERVICE_ON)
 
 
-#: Cable ends that carry network traffic, and those that carry power.
-_NETWORK_ENDS = {'interface', 'frontport', 'rearport', 'circuittermination'}
 _POWER_PORT, _POWER_OUTLET, _POWER_FEED = 'powerport', 'poweroutlet', 'powerfeed'
 
 
-class CableProvider(Provider):
+class PowerCableProvider(Provider):
     """
-    Network cables: the devices (or circuit) at the two ends connect to
-    each other, with no impact either way since a cable has no direction.
-
     Power cables: the device with the power port is powered by the device
-    with the outlet (a PDU) or by the power feed.
+    with the outlet (a PDU) or by the power feed. All power supplies of one
+    device form the redundancy group "power". Network cables are handled by
+    the uplink providers below.
     """
     owner = 'dcim.cable'
-    specs = (CONNECTS, POWERED_BY)
+    specs = (POWERED_BY,)
 
     def watched(self):
         # Terminations are saved after their cable, so they trigger the refresh.
@@ -133,25 +141,17 @@ class CableProvider(Provider):
 
     def build(self, ids=None):
         CableTermination = model('dcim.cabletermination')
-        CircuitTermination = model('circuits.circuittermination')
         rows = CableTermination.objects.all()
         if ids is not None:
             rows = rows.filter(cable_id__in=ids)
         ends = {}
-        circuit_terms = set()
         for cable_id, end, type_id, term_id, device_id in rows.values_list(
                 'cable_id', 'cable_end', 'termination_type_id', 'termination_id', '_device_id'):
             kind = ContentType.objects.get_for_id(type_id).model
-            if kind == 'circuittermination':
-                circuit_terms.add(term_id)
             ends.setdefault(cable_id, {'A': [], 'B': []})[end].append((kind, term_id, device_id))
-        circuits = dict(CircuitTermination.objects.filter(pk__in=circuit_terms).values_list('pk', 'circuit_id'))
 
         def node(kind, term_id, device_id):
             """(model label, pk) of what a cable end belongs to, or None."""
-            if kind == 'circuittermination':
-                circuit_id = circuits.get(term_id)
-                return ('circuits.circuit', circuit_id) if circuit_id else None
             if kind == _POWER_FEED:
                 return 'dcim.powerfeed', term_id
             return ('dcim.device', device_id) if device_id else None
@@ -160,27 +160,15 @@ class CableProvider(Provider):
             seen = set()
             for a in sides['A']:
                 for b in sides['B']:
-                    edge = self._pair(a, b, node)
-                    if edge is None:
+                    kinds = {a[0], b[0]}
+                    if _POWER_PORT not in kinds or not kinds & {_POWER_OUTLET, _POWER_FEED}:
                         continue
-                    (src, tgt, spec) = edge
-                    if src == tgt or (src, tgt, spec.key) in seen:
+                    port, supply = (a, b) if a[0] == _POWER_PORT else (b, a)
+                    src, tgt = node(*port), node(*supply)
+                    if not src or not tgt or src == tgt or (src, tgt) in seen:
                         continue
-                    seen.add((src, tgt, spec.key))
-                    yield Edge(cable_id, src[0], src[1], tgt[0], tgt[1], spec)
-
-    @staticmethod
-    def _pair(a, b, node):
-        """(source node, target node, spec) for two cable ends, or None."""
-        kinds = {a[0], b[0]}
-        if _POWER_PORT in kinds and kinds & {_POWER_OUTLET, _POWER_FEED}:
-            port, supply = (a, b) if a[0] == _POWER_PORT else (b, a)
-            src, tgt = node(*port), node(*supply)
-            return (src, tgt, POWERED_BY) if src and tgt else None
-        if a[0] in _NETWORK_ENDS and b[0] in _NETWORK_ENDS:
-            src, tgt = node(*a), node(*b)
-            return (src, tgt, CONNECTS) if src and tgt else None
-        return None
+                    seen.add((src, tgt))
+                    yield Edge(cable_id, src[0], src[1], tgt[0], tgt[1], POWERED_BY, group='power')
 
 
 class PowerFeedProvider(Provider):
@@ -208,14 +196,109 @@ class CircuitProvider(Provider):
 
 
 class VirtualChassisProvider(Provider):
-    """A device is a member of its virtual chassis."""
+    """
+    A virtual chassis (a stack, or a pair of switches acting as one) runs on
+    its members. The members form one redundancy group: losing one leaves
+    the chassis at risk, losing all takes it down.
+    """
     owner = 'dcim.device'
-    specs = (VC_MEMBER,)
+    specs = (VC_RUNS_ON,)
 
     def build(self, ids=None):
         rows = self.owners(ids).filter(virtual_chassis__isnull=False).values_list('pk', 'virtual_chassis_id')
         for pk, vc_id in rows:
-            yield Edge(pk, 'dcim.device', pk, 'dcim.virtualchassis', vc_id, VC_MEMBER)
+            yield Edge(pk, 'dcim.virtualchassis', vc_id, 'dcim.device', pk, VC_RUNS_ON, group='members')
+
+
+class _UplinkProvider(Provider):
+    """
+    Network cables, read as whole cable paths (through patch panels) and
+    turned into uplinks, peer links or plain connections by topology.py.
+    Two providers share this code: one owns the links of devices that are
+    not in a virtual chassis, the other the links of virtual chassis.
+    """
+    specs = (UPLINK, PEER, CONNECTS)
+    #: topology node label this provider owns (DEVICE or CHASSIS).
+    node_label = None
+
+    def _ids(self, nodes):
+        return [pk for label, pk in nodes if label == self.node_label]
+
+    def _with_neighbours(self, nodes):
+        nodes = set(nodes)
+        return self._ids(nodes | topology.neighbours(nodes))
+
+    def watched(self):
+        def from_path(path):
+            # Both ends of a cable path: the interfaces' devices.
+            interface_ct = ContentType.objects.get_for_model(model('dcim.interface')).pk
+            interface_ids = []
+            for step in (path.path[:1] + path.path[-1:]) if path.path else ():
+                for node in step:
+                    ct_id, pk = node.split(':')
+                    if int(ct_id) == interface_ct:
+                        interface_ids.append(int(pk))
+            interfaces = model('dcim.interface').objects.filter(pk__in=interface_ids)
+            device_ids = interfaces.values_list('device_id', flat=True)
+            return self._ids(topology.nodes_of_devices(device_ids))
+
+        def from_device(device):
+            # A role or chassis change can turn links of the neighbours around.
+            nodes = {(topology.DEVICE, device.pk)}
+            if device.virtual_chassis_id:
+                nodes.add((topology.CHASSIS, device.virtual_chassis_id))
+            return self._with_neighbours(nodes)
+
+        def from_tag(item):
+            # An uplink/downlink tag added to or removed from an interface.
+            interface = model('dcim.interface')
+            if item.content_type_id != ContentType.objects.get_for_model(interface).pk:
+                return []
+            device_ids = interface.objects.filter(pk=item.object_id).values_list('device_id', flat=True)
+            return self._with_neighbours(topology.nodes_of_devices(device_ids))
+
+        return [('dcim.cablepath', from_path), ('dcim.device', from_device), ('extras.taggeditem', from_tag)]
+
+    def build(self, ids=None):
+        if ids is None:
+            ids = self.owners().values_list('pk', flat=True)
+        nodes = {(self.node_label, pk) for pk in ids}
+        links = topology.Links(nodes)
+        for (node, other), link in links.collect().items():
+            if node[0] != self.node_label:
+                continue
+            direction = links.direction(node, other, link)
+            count = link['count']
+            note = ngettext('%(n)d cable', '%(n)d cables', count) % {'n': count}
+            if direction == 'needs':
+                yield Edge(node[1], node[0], node[1], other[0], other[1], UPLINK,
+                           group='uplinks', link_count=count, note=note)
+            elif other[0] == topology.CIRCUIT:
+                # A circuit owns nothing, so this end keeps every circuit link.
+                spec = UPLINK if direction == 'needed' else CONNECTS
+                if spec is UPLINK:
+                    yield Edge(node[1], other[0], other[1], node[0], node[1], spec, link_count=count, note=note)
+                else:
+                    yield Edge(node[1], node[0], node[1], other[0], other[1], spec, link_count=count, note=note)
+            elif direction in ('peer', 'connects') and topology.node_key(node) < topology.node_key(other):
+                spec = PEER if direction == 'peer' else CONNECTS
+                yield Edge(node[1], node[0], node[1], other[0], other[1], spec, link_count=count, note=note)
+            # 'needed': the other end owns that link.
+
+
+class DeviceUplinkProvider(_UplinkProvider):
+    """Network links of devices that are not in a virtual chassis."""
+    owner = 'dcim.device'
+    node_label = topology.DEVICE
+
+    def owners(self, ids=None):
+        return super().owners(ids).filter(virtual_chassis__isnull=True)
+
+
+class ChassisUplinkProvider(_UplinkProvider):
+    """Network links of virtual chassis (stacks and switch pairs), from all their members' cables."""
+    owner = 'dcim.virtualchassis'
+    node_label = topology.CHASSIS
 
 
 class LogicalParentProvider(Provider):
@@ -276,7 +359,7 @@ class IPPrefixProvider(Provider):
 
 #: Every provider, in the order a rebuild runs them.
 PROVIDERS = (
-    VMProvider(), ClusterHostProvider(), ServiceProvider(), CableProvider(), PowerFeedProvider(),
-    CircuitProvider(), VirtualChassisProvider(), LogicalParentProvider(), PlacementProvider(),
-    PrefixVLANProvider(), IPPrefixProvider(),
+    VMProvider(), ClusterHostProvider(), ServiceProvider(), PowerCableProvider(), PowerFeedProvider(),
+    CircuitProvider(), VirtualChassisProvider(), DeviceUplinkProvider(), ChassisUplinkProvider(),
+    LogicalParentProvider(), PlacementProvider(), PrefixVLANProvider(), IPPrefixProvider(),
 )

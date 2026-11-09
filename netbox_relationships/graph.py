@@ -27,6 +27,7 @@ DOWN, UP, BOTH = 'down', 'up', 'both'
 EDGE_FIELDS = (
     'pk', 'source_type_id', 'source_id', 'target_type_id', 'target_id', 'origin', 'relationship_id',
     'rtype_id', 'label', 'reverse_label', 'impact', 'symmetric', 'status', 'criticality', 'color',
+    'group', 'group_min', 'link_count', 'note',
 )
 
 
@@ -151,6 +152,7 @@ def _node_group(obj, model):
         'virtualization.cluster': 'cluster',
         'ipam.service': 'service',
         'dcim.device': 'device',
+        'dcim.virtualchassis': 'chassis',
         'circuits.circuit': 'circuit',
         'dcim.powerfeed': 'power',
         'dcim.powerpanel': 'power',
@@ -184,6 +186,8 @@ def resolve(user, node_ids):
             queryset = model.objects.all()
             if hasattr(queryset, 'restrict'):
                 queryset = queryset.restrict(user, 'view')
+            if model._meta.label_lower == 'dcim.device':
+                queryset = queryset.select_related('role')
             visible = {obj.pk: obj for obj in queryset.filter(pk__in=pks)}
         for pk in pks:
             obj = visible.get(pk)
@@ -195,6 +199,8 @@ def resolve(user, node_ids):
                 continue
             status, status_color = _status(obj)
             kind = obj.get_kind_display() if hasattr(obj, 'get_kind_display') else model._meta.verbose_name
+            if getattr(obj, 'role', None) is not None and model._meta.label_lower == 'dcim.device':
+                kind = obj.role.name  # "Access switch" says more than "Device".
             try:
                 url = obj.get_absolute_url()
             except Exception:
@@ -222,6 +228,10 @@ def edge_dict(row):
         'status': row['status'],
         'criticality': row['criticality'],
         'color': row['color'],
+        'group': row['group'],
+        'group_min': row['group_min'],
+        'link_count': row['link_count'],
+        'note': row['note'],
     }
 
 

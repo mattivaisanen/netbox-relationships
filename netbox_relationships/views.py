@@ -1,14 +1,25 @@
 from django.contrib import messages
-from django.shortcuts import render
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
+from django.db import transaction
+from django.db.models import Count, Q
+from django.http import HttpResponseForbidden
+from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
+from django.utils.translation import ngettext
 from django.views.generic import View
 
 from netbox.views import generic
 from utilities.views import ConditionalLoginRequiredMixin, register_model_view
 
-from . import filtersets, forms, impact, servicemap, settings, tables
-from .graph import key, parse_key
-from .models import LogicalService, Relationship, RelationshipType
+from . import filtersets, forms, impact, servicemap, settings, tables, tabs
+from .choices import ImpactChoices
+from .constants import COMMON_TYPES, MANUAL
+from .edges import rebuild
+from .graph import EDGE_FIELDS, key, parse_key, resolve
+from .models import EdgeIndex, LogicalService, Relationship, RelationshipType
 
 #
 # Relationship types
@@ -251,3 +262,203 @@ class ServiceMapView(ConditionalLoginRequiredMixin, View):
             'failed_query': '&'.join(f'failed={key(*obj)}' for obj in failed),
             'object_query': '&'.join(f'object={key(*obj)}' for obj in failed),
         })
+
+
+#
+# Adding several relationships at once
+#
+
+def _object_from(request, value):
+    """The object behind "<ct>:<pk>" if the user may view it, else None."""
+    parsed = parse_key(value or '')
+    if parsed is None:
+        return None
+    model = ContentType.objects.get_for_id(parsed[0]).model_class()
+    if model is None:
+        return None
+    queryset = model.objects.all()
+    if hasattr(queryset, 'restrict'):
+        queryset = queryset.restrict(request.user, 'view')
+    return queryset.filter(pk=parsed[1]).first()
+
+
+class RelationshipAddManyView(ConditionalLoginRequiredMixin, View):
+    """
+    Links one object to several others in one go: "this object needs these"
+    or "these need this object". One relationship per other object, all in
+    one transaction (and one change log request).
+    """
+    template_name = 'netbox_relationships/relationship_add_many.html'
+
+    def _context(self, request):
+        obj = _object_from(request, request.GET.get('object') or request.POST.get('object'))
+        target_ct = None
+        type_id = request.GET.get('target_type') or request.POST.get('target_type')
+        if type_id and str(type_id).isdigit():
+            target_ct = ContentType.objects.filter(pk=type_id).first()
+        return obj, target_ct
+
+    def _render(self, request, form, obj, target_ct):
+        return render(request, self.template_name, {
+            'form': form, 'obj': obj, 'target_ct': target_ct,
+            'object_key': key(ContentType.objects.get_for_model(obj).pk, obj.pk),
+            'return_url': safe_return_url(request, obj),
+            'version': tabs.asset_version(),
+        })
+
+    def get(self, request):
+        if not request.user.has_perm('netbox_relationships.add_relationship'):
+            return HttpResponseForbidden()
+        obj, target_ct = self._context(request)
+        if obj is None:
+            messages.warning(request, _('Open this page from an object: its Relationships card or tab.'))
+            return redirect('plugins:netbox_relationships:relationship_list')
+        form = forms.RelationshipAddManyForm(obj=obj, target_ct=target_ct, initial={
+            'direction': request.GET.get('direction', 'needs'), 'target_type': target_ct,
+        })
+        return self._render(request, form, obj, target_ct)
+
+    def post(self, request):
+        if not request.user.has_perm('netbox_relationships.add_relationship'):
+            return HttpResponseForbidden()
+        obj, target_ct = self._context(request)
+        if obj is None:
+            return HttpResponseForbidden()
+        form = forms.RelationshipAddManyForm(request.POST, obj=obj, target_ct=target_ct)
+        if not form.is_valid():
+            return self._render(request, form, obj, target_ct)
+        data = form.cleaned_data
+        targets = data['targets']
+        if hasattr(targets, 'restrict'):
+            targets = targets.restrict(request.user, 'view')
+        created, skipped, errors = [], [], []
+        try:
+            with transaction.atomic():
+                for other in targets:
+                    source, target = (obj, other) if data['direction'] == 'needs' else (other, obj)
+                    rel = Relationship(
+                        type=data['type'], source=source, target=target, status=data['status'],
+                        criticality=data['criticality'], impact=data['impact'] or '', label=data['label'],
+                        description=data['description'],
+                        group=data['group'] if data['redundant'] else '',
+                        group_min=(data['group_min'] or 1) if data['redundant'] else 1,
+                    )
+                    if Relationship.objects.filter(
+                            type=rel.type, source_type=rel.source_type, source_id=rel.source_id,
+                            target_type=rel.target_type, target_id=rel.target_id).exists():
+                        skipped.append(str(other))
+                        continue
+                    try:
+                        rel.full_clean()
+                    except ValidationError as error:
+                        errors.append(f"{other}: {'; '.join(error.messages)}")
+                        continue
+                    rel.save()
+                    created.append(rel)
+                if errors:
+                    raise ValidationError(errors)
+        except ValidationError:
+            for message in errors:
+                form.add_error(None, message)
+            return self._render(request, form, obj, target_ct)
+        if created:
+            messages.success(request, ngettext(
+                'Added %(n)d relationship.', 'Added %(n)d relationships.', len(created)) % {'n': len(created)})
+        if skipped:
+            messages.info(request, _('Already linked, left as they are: {names}').format(names=', '.join(skipped)))
+        return redirect(safe_return_url(request, obj))
+
+
+def safe_return_url(request, obj):
+    """The return_url parameter when it is a local path, else the object's page."""
+    url = request.GET.get('return_url') or request.POST.get('return_url')
+    if url and url_has_allowed_host_and_scheme(url, allowed_hosts=None) and url.startswith('/'):
+        return url
+    return obj.get_absolute_url()
+
+
+#
+# Every link, manual and derived
+#
+
+class LinkListView(ConditionalLoginRequiredMixin, View):
+    """
+    Every link in the index, hand-made and worked out from NetBox, with its
+    origin. Read only: hand-made links are edited from Relationships, the
+    others by changing the NetBox data they come from.
+    """
+    template_name = 'netbox_relationships/link_list.html'
+    per_page = 50
+
+    def get(self, request):
+        if not request.user.has_perm('netbox_relationships.view_relationship'):
+            return HttpResponseForbidden()
+        queryset = EdgeIndex.objects.order_by('origin', 'pk')
+        origin = request.GET.get('origin')
+        if origin:
+            queryset = queryset.filter(origin=origin)
+        impacting = request.GET.get('impact')
+        if impacting in ('hard', 'soft', 'none'):
+            queryset = queryset.filter(impact=impacting)
+        counts = dict(EdgeIndex.objects.values_list('origin').annotate(n=Count('pk')).values_list('origin', 'n'))
+        page = Paginator(queryset.values(*EDGE_FIELDS), self.per_page).get_page(request.GET.get('page'))
+        rows = list(page.object_list)
+        ends = {(r['source_type_id'], r['source_id']) for r in rows}
+        ends |= {(r['target_type_id'], r['target_id']) for r in rows}
+        nodes = resolve(request.user, ends)
+        links = [{
+            'source': nodes[(r['source_type_id'], r['source_id'])],
+            'target': nodes[(r['target_type_id'], r['target_id'])],
+            'label': r['label'], 'note': r['note'], 'symmetric': r['symmetric'],
+            'impact': tabs.choice(ImpactChoices, r['impact']),
+            'group': r['group'], 'group_min': r['group_min'], 'link_count': r['link_count'],
+            'manual': r['origin'] == MANUAL, 'origin': tabs.ORIGIN_LABELS.get(r['origin'], r['origin']),
+            'relationship_id': r['relationship_id'],
+        } for r in rows]
+        origins = sorted(
+            ((value, tabs.ORIGIN_LABELS.get(value, value), n) for value, n in counts.items()),
+            key=lambda item: (item[0] != MANUAL, str(item[1])),
+        )
+        query = request.GET.copy()
+        query.pop('page', None)
+        return render(request, self.template_name, {
+            'links': links, 'page': page, 'origins': origins, 'origin': origin, 'impact': impacting,
+            'total': sum(counts.values()), 'query': query.urlencode(),
+            'can_rebuild': request.user.has_perm('netbox_relationships.change_relationship'),
+        })
+
+
+class RebuildIndexView(ConditionalLoginRequiredMixin, View):
+    """Rebuilds the whole index now (the same as the nightly job)."""
+
+    def post(self, request):
+        if not request.user.has_perm('netbox_relationships.change_relationship'):
+            return HttpResponseForbidden()
+        counts = rebuild()
+        messages.success(request, ngettext(
+            'Rebuilt: %(n)d link.', 'Rebuilt: %(n)d links.', sum(counts.values())) % {'n': sum(counts.values())})
+        return redirect('plugins:netbox_relationships:link_list')
+
+
+class AddCommonTypesView(ConditionalLoginRequiredMixin, View):
+    """Creates the optional common relationship types that don't exist yet. Never changes existing ones."""
+
+    def post(self, request):
+        if not request.user.has_perm('netbox_relationships.add_relationshiptype'):
+            return HttpResponseForbidden()
+        added = []
+        for name, slug, forward, reverse, category, impact_value, symmetric, color in COMMON_TYPES:
+            if RelationshipType.objects.filter(Q(slug=slug) | Q(name=name)).exists():
+                continue
+            rtype = RelationshipType(
+                name=name, slug=slug, forward_label=forward, reverse_label=reverse, category=category,
+                impact=impact_value, symmetric=symmetric, allow_cycles=symmetric, color=color,
+            )
+            rtype.full_clean()
+            rtype.save()
+            added.append(name)
+        if added:
+            messages.success(request, _('Added: {names}').format(names=', '.join(added)))
+        else:
+            messages.info(request, _('All common types are already there.'))
+        return redirect('plugins:netbox_relationships:relationshiptype_list')

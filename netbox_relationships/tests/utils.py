@@ -19,9 +19,9 @@ def make_devices(*names):
     return [Device.objects.create(name=n, site=site, device_type=dtype, role=role) for n in names]
 
 
-def needs(source, target, slug='depends-on'):
+def needs(source, target, slug='depends-on', **fields):
     """A relationship "source needs target" of a default type."""
-    rel = Relationship(type=RelationshipType.objects.get(slug=slug), source=source, target=target)
+    rel = Relationship(type=RelationshipType.objects.get(slug=slug), source=source, target=target, **fields)
     rel.full_clean()
     rel.save()
     return rel

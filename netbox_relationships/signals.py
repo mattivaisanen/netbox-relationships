@@ -8,11 +8,13 @@ Keeps the edge index current. Connected from NetBoxRelationshipsConfig.ready().
   it affects.
 - Deleting any object first deletes its relationships (one by one, so the
   change log records them) and every index row that touches it.
+- After `manage.py migrate` the whole index is rebuilt, so a new install or
+  an upgrade shows every link straight away.
 """
 import logging
 
 from django.apps import apps
-from django.db.models.signals import post_delete, post_save, pre_delete
+from django.db.models.signals import post_delete, post_migrate, post_save, pre_delete
 
 from . import edges
 from .derived import PROVIDERS
@@ -86,3 +88,17 @@ def connect():
             uid = f'nbr_{type(provider).__name__}_{label}'
             post_save.connect(receiver, sender=model, dispatch_uid=f'{uid}_save')
             post_delete.connect(receiver, sender=model, dispatch_uid=f'{uid}_delete')
+
+
+def _migrated(sender, using='default', **kwargs):
+    """Rebuild the index after this plugin's migrations ran."""
+    try:
+        counts = edges.rebuild()
+        logger.info('netbox_relationships: rebuilt the relationship index after migrate: %s', counts)
+    except Exception:
+        # Never fail a migrate over the index; the nightly job and the command can rebuild it.
+        logger.exception('netbox_relationships: could not rebuild the relationship index after migrate')
+
+
+def connect_post_migrate(app_config):
+    post_migrate.connect(_migrated, sender=app_config, dispatch_uid='nbr_post_migrate')

@@ -1,0 +1,7 @@
+{% load i18n %}
+<form method="post" action="{% url 'plugins:netbox_relationships:relationshiptype_add_common' %}" class="d-inline">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-outline-secondary" title="{% trans 'Sends data to, backed up by, replicates to, managed by, monitored by, powered by, peer of. Types that already exist are left alone.' %}">
+    <i class="mdi mdi-playlist-plus"></i> {% trans "Add common types" %}
+  </button>
+</form>

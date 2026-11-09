@@ -36,6 +36,7 @@ class RelationshipFilterSet(PrimaryModelFilterSet):
     category = django_filters.MultipleChoiceFilter(field_name='type__category', choices=CategoryChoices)
     status = django_filters.MultipleChoiceFilter(choices=StatusChoices)
     criticality = django_filters.MultipleChoiceFilter(choices=CriticalityChoices)
+    impact = django_filters.MultipleChoiceFilter(choices=ImpactChoices)
     source_type = ContentTypeFilter()
     target_type = ContentTypeFilter()
     object = django_filters.CharFilter(
@@ -44,13 +45,14 @@ class RelationshipFilterSet(PrimaryModelFilterSet):
 
     class Meta:
         model = Relationship
-        fields = ('id', 'source_type_id', 'source_id', 'target_type_id', 'target_id', 'description')
+        fields = ('id', 'source_type_id', 'source_id', 'target_type_id', 'target_id', 'label', 'group', 'description')
 
     def search(self, queryset, name, value):
         if not value.strip():
             return queryset
         return queryset.filter(
             Q(description__icontains=value) | Q(comments__icontains=value) | Q(type__name__icontains=value)
+            | Q(label__icontains=value)
         )
 
     def filter_object(self, queryset, name, value):

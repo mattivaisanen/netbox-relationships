@@ -25,10 +25,20 @@ Use it to answer two questions:
   machines on clusters, services on devices, cables, power feeds, circuits
   and virtual chassis members. Rack placement and IP/prefix links can be
   switched on.
+- **Your network's shape from its cables.** List your device roles from
+  the top of the network down, and every cable (through patch panels)
+  becomes "uplinks to" the switch above. Stacks and switch pairs count as
+  one. No links to type in by hand.
+- **Redundancy.** Two uplinks, the hosts of a cluster or two database
+  replicas back each other up: losing one leaves things **at risk**,
+  losing all takes them **down**. Each object shows its single points of
+  failure.
 - **Logical services**: business services, applications and external
   services that have no NetBox object of their own.
 - On object pages: a **Relationships** card, a **Relationships** tab, a
-  **Dependency graph** tab and an **Impact** button.
+  **Dependency graph** tab and an **Impact** button. Add what an object
+  needs, or what needs it, many objects at a time.
+- An **All links** list with every link and where it comes from.
 - An **impact analysis** page, a layered **service map** for each business
   service, and a REST API for the graph and impact results.
 
@@ -54,7 +64,6 @@ PLUGINS = ['netbox_relationships']
 
 ```bash
 cd /opt/netbox/netbox && python manage.py migrate netbox_relationships
-python manage.py rebuild_relationship_index
 sudo systemctl restart netbox netbox-rq
 ```
 
@@ -68,8 +77,8 @@ pip install --upgrade --force-reinstall --no-deps git+https://github.com/mattiva
 cd /opt/netbox/netbox && python manage.py migrate
 ```
 
-Then restart NetBox. The [changelog](CHANGELOG.md) lists what each version
-needs.
+Then restart NetBox. `migrate` also rebuilds the plugin's link index. The
+[changelog](CHANGELOG.md) lists what each version needs.
 
 ## Uninstalling
 

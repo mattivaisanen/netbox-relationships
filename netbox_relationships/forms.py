@@ -1,9 +1,11 @@
 from django import forms
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Count, Q
 from django.utils.translation import gettext_lazy as _
 
 from core.models import ObjectType
+from dcim.models import Device
 from netbox.forms import (
     OrganizationalModelBulkEditForm, OrganizationalModelFilterSetForm, OrganizationalModelForm,
     OrganizationalModelImportForm, PrimaryModelBulkEditForm, PrimaryModelFilterSetForm, PrimaryModelForm,
@@ -137,15 +139,19 @@ class RelationshipForm(GenericObjectFormMixin, PrimaryModelForm):
     comments = CommentField()
 
     fieldsets = (
-        FieldSet('source', name=_('From'), html_id='from'),
-        FieldSet('type', name=_('Relationship')),
-        FieldSet('target', name=_('To'), html_id='to'),
+        FieldSet('source', name=_('From (the object that needs)'), html_id='from'),
+        FieldSet('type', 'impact', 'label', name=_('Relationship')),
+        FieldSet('target', name=_('To (the object that is needed)'), html_id='to'),
+        FieldSet('group', 'group_min', name=_('Redundancy')),
         FieldSet('status', 'criticality', 'description', 'tags', name=_('Details')),
     )
 
     class Meta:
         model = Relationship
-        fields = ('type', 'status', 'criticality', 'description', 'owner', 'comments', 'tags')
+        fields = (
+            'type', 'impact', 'label', 'group', 'group_min', 'status', 'criticality', 'description', 'owner',
+            'comments', 'tags',
+        )
 
 
 class RelationshipBulkEditForm(PrimaryModelBulkEditForm):
@@ -154,11 +160,15 @@ class RelationshipBulkEditForm(PrimaryModelBulkEditForm):
     criticality = forms.ChoiceField(
         label=_('Criticality'), choices=add_blank_choice(CriticalityChoices), required=False,
     )
+    impact = forms.ChoiceField(label=_('Impact'), choices=add_blank_choice(ImpactChoices), required=False)
+    label = forms.CharField(label=_('Label'), max_length=100, required=False)
+    group = forms.CharField(label=_('Redundancy group'), max_length=50, required=False)
+    group_min = forms.IntegerField(label=_('Needs at least'), min_value=1, required=False)
     description = forms.CharField(label=_('Description'), max_length=200, required=False)
 
     model = Relationship
-    fieldsets = (FieldSet('type', 'status', 'criticality', 'description'),)
-    nullable_fields = ('description', 'comments')
+    fieldsets = (FieldSet('type', 'status', 'criticality', 'impact', 'label', 'group', 'group_min', 'description'),)
+    nullable_fields = ('description', 'comments', 'impact', 'label', 'group')
 
 
 class _ObjectByNameMixin:
@@ -206,12 +216,15 @@ class RelationshipImportForm(_ObjectByNameMixin, PrimaryModelImportForm):
     target_name = forms.CharField(label=_('Target name'), required=False, help_text=_('Used when no ID is given'))
     status = CSVChoiceField(label=_('Status'), choices=StatusChoices, required=False)
     criticality = CSVChoiceField(label=_('Criticality'), choices=CriticalityChoices, required=False)
+    impact = CSVChoiceField(label=_('Impact'), choices=ImpactChoices, required=False,
+                            help_text=_("hard, soft or none. Empty: the type's default"))
 
     class Meta:
         model = Relationship
         fields = (
             'type', 'source_type', 'source_id', 'source_name', 'target_type', 'target_id', 'target_name',
-            'status', 'criticality', 'description', 'owner', 'comments', 'tags',
+            'status', 'criticality', 'impact', 'label', 'group', 'group_min', 'description', 'owner', 'comments',
+            'tags',
         )
 
     def clean(self):
@@ -337,3 +350,109 @@ class ImpactAddForm(forms.Form):
         self.fields['object_type'].label_from_instance = lambda ct: (
             str(ct.model_class()._meta.verbose_name).capitalize() if ct.model_class() else ct.model
         )
+
+
+#
+# Adding several relationships at once
+#
+
+#: Object pairs where "runs on" is the natural default type.
+_HOSTING_PAIRS = {
+    ('virtualization.virtualmachine', 'virtualization.cluster'),
+    ('virtualization.virtualmachine', 'dcim.device'),
+    ('ipam.service', 'virtualization.virtualmachine'),
+    ('ipam.service', 'dcim.device'),
+    ('netbox_relationships.logicalservice', 'virtualization.virtualmachine'),
+    ('netbox_relationships.logicalservice', 'dcim.device'),
+    ('netbox_relationships.logicalservice', 'ipam.service'),
+}
+
+
+def types_for(source_ct, target_ct):
+    """Relationship types that allow this pair of object types."""
+    queryset = RelationshipType.objects.all()
+    if source_ct is not None:
+        queryset = queryset.filter(Q(source_types__isnull=True) | Q(source_types=source_ct))
+    if target_ct is not None:
+        queryset = queryset.filter(Q(target_types__isnull=True) | Q(target_types=target_ct))
+    return queryset.distinct().order_by('name')
+
+
+def default_type(source_ct, target_ct, allowed):
+    """The type most used for this pair, else "runs on" for hosting pairs, else "depends on"."""
+    if source_ct is not None and target_ct is not None:
+        used = Relationship.objects.filter(
+            source_type=source_ct, target_type=target_ct, type__in=allowed,
+        ).values('type').annotate(n=Count('pk')).order_by('-n').first()
+        if used:
+            return used['type']
+        pair = (f'{source_ct.app_label}.{source_ct.model}', f'{target_ct.app_label}.{target_ct.model}')
+        preferred = 'runs-on' if pair in _HOSTING_PAIRS else 'depends-on'
+        found = allowed.filter(slug=preferred).values_list('pk', flat=True).first()
+        if found:
+            return found
+    return allowed.values_list('pk', flat=True).first()
+
+
+class EffectChoices:
+    """The add form's "if it fails" question, mapped to impact."""
+    DEFAULT = ''
+    CHOICES = (
+        (ImpactChoices.HARD, _('stops working')),
+        (ImpactChoices.SOFT, _('works, but worse')),
+        (ImpactChoices.NONE, _('is not affected (a note only)')),
+        (DEFAULT, _("as the relationship type says")),
+    )
+
+
+class RelationshipAddManyForm(forms.Form):
+    """
+    One object, a direction ("needs" or "is needed by") and any number of
+    other objects of one type: one relationship per other object.
+    """
+    direction = forms.ChoiceField(
+        label=_('This object'), widget=forms.RadioSelect,
+        choices=(('needs', _('needs these')), ('needed_by', _('is needed by these'))),
+    )
+    target_type = forms.ModelChoiceField(label=_('Object type'), queryset=ContentType.objects.none())
+    targets = DynamicModelMultipleChoiceField(label=_('Objects'), queryset=Device.objects.none(), required=False)
+    type = forms.ModelChoiceField(label=_('Relationship type'), queryset=RelationshipType.objects.none())
+    impact = forms.ChoiceField(label=_('If what is needed fails, what needs it'), choices=EffectChoices.CHOICES,
+                               required=False, widget=forms.RadioSelect)
+    redundant = forms.BooleanField(
+        label=_('These back each other up'), required=False,
+        help_text=_('Put the new links in one redundancy group, such as two uplinks or two database replicas.'),
+    )
+    group = forms.CharField(label=_('Group name'), max_length=50, required=False, initial='redundant')
+    group_min = forms.IntegerField(label=_('Needs at least'), min_value=1, initial=1, required=False)
+    label = forms.CharField(label=_('Label'), max_length=100, required=False,
+                            help_text=_('What the links are for, such as "SQL for reporting".'))
+    status = forms.ChoiceField(label=_('Status'), choices=StatusChoices, initial=StatusChoices.ACTIVE)
+    criticality = forms.ChoiceField(label=_('Criticality'), choices=CriticalityChoices,
+                                    initial=CriticalityChoices.MEDIUM)
+    description = forms.CharField(label=_('Reason'), max_length=200, required=False)
+
+    def __init__(self, *args, obj=None, target_ct=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.obj = obj
+        self.fields['target_type'].queryset = linkable_types()
+        self.fields['target_type'].label_from_instance = lambda ct: (
+            str(ct.model_class()._meta.verbose_name).capitalize() if ct.model_class() else ct.model
+        )
+        obj_ct = ContentType.objects.get_for_model(obj) if obj is not None else None
+        direction = self.data.get('direction') or self.initial.get('direction') or 'needs'
+        source_ct, dest_ct = (obj_ct, target_ct) if direction == 'needs' else (target_ct, obj_ct)
+        allowed = types_for(source_ct, dest_ct)
+        self.fields['type'].queryset = allowed
+        self.fields['type'].initial = default_type(source_ct, dest_ct, allowed)
+        if target_ct is not None and target_ct.model_class() is not None:
+            model = target_ct.model_class()
+            self.fields['targets'].queryset = model.objects.all()
+            self.fields['targets'].required = True
+        self.fields['impact'].initial = EffectChoices.DEFAULT
+
+    def clean(self):
+        data = super().clean()
+        if data.get('redundant') and not data.get('group'):
+            self.add_error('group', _('Give the group a name.'))
+        return data

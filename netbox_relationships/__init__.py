@@ -13,7 +13,7 @@ class NetBoxRelationshipsConfig(PluginConfig):
         'Typed relationships between any NetBox objects, links NetBox already knows, '
         'a dependency graph, impact analysis and a layered service map.'
     )
-    version = '0.1.0'
+    version = '0.2.0'
     author = 'Matti'
     base_url = 'relationships'
     # The oldest NetBox release the tests run on.
@@ -28,17 +28,29 @@ class NetBoxRelationshipsConfig(PluginConfig):
         # Stop collecting objects after this many, so one request can't
         # load the whole database. The result then says it was cut short.
         'max_nodes': 1000,
+        # Device role slugs from the top of the network down, one list per
+        # tier: [['spine'], ['leaf']]. A cable between two
+        # tiers becomes "uplinks to" (the lower tier needs the higher one).
+        # Empty: cables carry no impact, as in 0.1.
+        'network_tiers': [],
+        # With tiers set, devices whose role is in no tier (servers,
+        # firewalls, access points) sit below the last tier.
+        'tier_endpoints': True,
+        # Interface tags that set the direction by hand: "uplink" on an
+        # interface means its device needs the far end, "downlink" the reverse.
+        'uplink_tag': 'uplink',
+        'downlink_tag': 'downlink',
         # Links worked out from NetBox's own data, by kind. Each one can be
         # switched off; run `manage.py rebuild_relationship_index` after a
         # change. See derived.py for what each kind adds.
         'derived': {
             'vm_cluster': True,       # VM runs on its cluster (and its device, if pinned)
-            'cluster_hosts': True,    # cluster runs on its devices
+            'cluster_hosts': True,    # cluster runs on its devices (needs at least one)
             'service_parent': True,   # service runs on its device or VM
-            'cables': True,           # device connects to device through cables
+            'cables': True,           # network cables: uplinks, peers or plain connections (see network_tiers)
             'power': True,            # device powered by power feed / PDU; feed fed by panel
             'circuits': True,         # circuit terminates at site or provider network
-            'virtual_chassis': True,  # device is a member of its virtual chassis
+            'virtual_chassis': True,  # virtual chassis runs on its members (needs at least one)
             'logical_parent': True,   # business service consists of its applications
             'placement': False,       # device sits in its rack, location or site
             'ip_prefix': False,       # IP address in prefix, prefix in VLAN
@@ -65,6 +77,7 @@ class NetBoxRelationshipsConfig(PluginConfig):
 
         from . import jobs, signals, tabs  # noqa: F401 (registers jobs, receivers and tabs)
         signals.connect()
+        signals.connect_post_migrate(self)
         tabs.register()
 
 

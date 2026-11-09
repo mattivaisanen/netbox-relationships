@@ -39,13 +39,14 @@ class RelationshipSerializer(NetBoxModelSerializer):
     target = GFKSerializerField(read_only=True)
     status = ChoiceField(choices=StatusChoices, required=False)
     criticality = ChoiceField(choices=CriticalityChoices, required=False)
+    impact = ChoiceField(choices=ImpactChoices, required=False, allow_blank=True)
 
     class Meta:
         model = Relationship
         fields = (
             'id', 'url', 'display_url', 'display', 'type', 'source_type', 'source_id', 'source', 'target_type',
-            'target_id', 'target', 'status', 'criticality', 'description', 'owner', 'comments', 'tags',
-            'custom_fields', 'created', 'last_updated',
+            'target_id', 'target', 'status', 'criticality', 'impact', 'label', 'group', 'group_min',
+            'description', 'owner', 'comments', 'tags', 'custom_fields', 'created', 'last_updated',
         )
         brief_fields = ('id', 'url', 'display', 'type', 'source_type', 'source_id', 'target_type', 'target_id')
 

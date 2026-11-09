@@ -1,0 +1,67 @@
+{% extends 'generic/_base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "All Links" %}{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted mb-3">
+      {% trans "Every link the plugin knows: the ones added by hand and the ones worked out from NetBox data (cables, clusters, virtual chassis, power…). Links from NetBox change when the NetBox data changes." %}
+    </p>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <a class="btn btn-sm {% if not origin %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="?">{% trans "All" %} <span class="badge text-bg-light ms-1">{{ total }}</span></a>
+      {% for value, label, n in origins %}
+        <a class="btn btn-sm {% if origin == value %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="?origin={{ value }}{% if impact %}&amp;impact={{ impact }}{% endif %}">{{ label }} <span class="badge text-bg-light ms-1">{{ n }}</span></a>
+      {% endfor %}
+      <span class="flex-grow-1"></span>
+      <select class="form-select form-select-sm w-auto" onchange="window.location.search=this.value" aria-label="{% trans 'Impact' %}">
+        <option value="?{% if origin %}origin={{ origin }}{% endif %}">{% trans "Any impact" %}</option>
+        <option value="?{% if origin %}origin={{ origin }}&amp;{% endif %}impact=hard"{% if impact == 'hard' %} selected{% endif %}>{% trans "Hard" %}</option>
+        <option value="?{% if origin %}origin={{ origin }}&amp;{% endif %}impact=soft"{% if impact == 'soft' %} selected{% endif %}>{% trans "Soft" %}</option>
+        <option value="?{% if origin %}origin={{ origin }}&amp;{% endif %}impact=none"{% if impact == 'none' %} selected{% endif %}>{% trans "None" %}</option>
+      </select>
+      {% if can_rebuild %}
+        <form method="post" action="{% url 'plugins:netbox_relationships:rebuild_index' %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-outline-secondary" title="{% trans 'Work out every link from NetBox data again. Runs nightly by itself.' %}"><i class="mdi mdi-refresh"></i> {% trans "Rebuild now" %}</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead><tr>
+        <th>{% trans "Source" %}</th><th>{% trans "Relationship" %}</th><th>{% trans "Target" %}</th>
+        <th>{% trans "Impact" %}</th><th>{% trans "Origin" %}</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for link in links %}
+          <tr>
+            <td>{% if link.source.url %}<a href="{{ link.source.url }}">{{ link.source.label }}</a>{% else %}<span class="text-muted">{{ link.source.label }}</span>{% endif %}<div class="small text-muted">{{ link.source.kind }}</div></td>
+            <td>{{ link.label }}{% if link.link_count > 1 %} <span class="badge text-bg-light">&times;{{ link.link_count }}</span>{% endif %}{% if link.note %}<div class="small text-muted">{{ link.note }}</div>{% endif %}</td>
+            <td>{% if link.target.url %}<a href="{{ link.target.url }}">{{ link.target.label }}</a>{% else %}<span class="text-muted">{{ link.target.label }}</span>{% endif %}<div class="small text-muted">{{ link.target.kind }}</div></td>
+            <td><span class="badge text-bg-{{ link.impact.1 }}">{{ link.impact.0 }}</span>{% if link.group %}<div class="small text-muted"><i class="mdi mdi-shield-half-full"></i> {{ link.group }} ({% blocktrans with n=link.group_min %}needs {{ n }}{% endblocktrans %})</div>{% endif %}</td>
+            <td>{% if link.manual %}<span class="badge text-bg-blue">{{ link.origin }}</span>{% else %}<span class="badge text-bg-secondary">{% trans "NetBox" %}: {{ link.origin }}</span>{% endif %}</td>
+            <td class="text-end">{% if link.manual %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'plugins:netbox_relationships:relationship' pk=link.relationship_id %}">{% trans "View" %}</a>{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-muted">
+            {% trans "No links yet." %}
+            {% if can_rebuild %}{% trans "If NetBox already has cables, clusters or virtual chassis, use Rebuild now." %}{% endif %}
+          </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page.paginator.num_pages > 1 %}
+    <div class="card-footer d-flex justify-content-between align-items-center">
+      <span class="text-muted small">{% blocktrans with n=page.number total=page.paginator.num_pages %}Page {{ n }} of {{ total }}{% endblocktrans %}</span>
+      <div class="btn-group">
+        {% if page.has_previous %}<a class="btn btn-sm btn-outline-secondary" href="?{{ query }}{% if query %}&amp;{% endif %}page={{ page.previous_page_number }}">{% trans "Previous" %}</a>{% endif %}
+        {% if page.has_next %}<a class="btn btn-sm btn-outline-secondary" href="?{{ query }}{% if query %}&amp;{% endif %}page={{ page.next_page_number }}">{% trans "Next" %}</a>{% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

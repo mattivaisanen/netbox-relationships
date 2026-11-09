@@ -47,12 +47,19 @@ DEFAULT_LAYERS = {
 #: layer of the service map instead of compute.
 NETWORK_ROLE_WORDS = ('switch', 'router', 'firewall', 'spine', 'leaf', 'gateway', 'network', 'wifi', 'access-point')
 
-#: Relationship types created on install (a copy is in migration 0002):
+#: Relationship types created on a new install (a copy is in migration 0002):
 #: (name, slug, forward label, reverse label, category, impact, symmetric, color).
+#: Impact is only the default: each relationship can set its own.
 DEFAULT_TYPES = (
     ('Depends on', 'depends-on', 'depends on', 'is required by', 'dependency', 'hard', False, '2f6fdf'),
     ('Runs on', 'runs-on', 'runs on', 'hosts', 'hosting', 'hard', False, '6b7690'),
     ('Connects to', 'connects-to', 'connects to', 'connects to', 'connectivity', 'none', True, '9aa3b2'),
+    ('Related to', 'related-to', 'is related to', 'is related to', 'informational', 'none', True, 'b0bec5'),
+)
+
+#: More types an admin can add with "Add common types" on the types list.
+#: Installs from before 0.2.0 already have them; upgrades never remove them.
+COMMON_TYPES = (
     ('Sends data to', 'sends-data-to', 'sends data to', 'receives data from', 'data_flow', 'soft', False, '1f7a6b'),
     ('Backed up by', 'backed-up-by', 'is backed up by', 'backs up', 'dependency', 'soft', False, '795548'),
     ('Replicates to', 'replicates-to', 'replicates to', 'is replicated from', 'data_flow', 'soft', False, '00838f'),
@@ -60,5 +67,4 @@ DEFAULT_TYPES = (
     ('Monitored by', 'monitored-by', 'is monitored by', 'monitors', 'dependency', 'soft', False, '9e9d24'),
     ('Powered by', 'powered-by', 'is powered by', 'powers', 'dependency', 'hard', False, 'e65100'),
     ('Peer of', 'peer-of', 'is a peer of', 'is a peer of', 'informational', 'none', True, '607d8b'),
-    ('Related to', 'related-to', 'is related to', 'is related to', 'informational', 'none', True, 'b0bec5'),
 )

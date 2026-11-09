@@ -87,6 +87,8 @@ ports in between are followed):
   (`tier_endpoints`), so servers, firewalls and access points uplink to
   their switch. With `tier_endpoints: False` they only *connect to* it.
 - circuits sit above every tier: the device at a circuit's end needs it.
+- management-only interfaces (out-of-band ports) are skipped at both
+  ends: they never make a link.
 
 A member of a virtual chassis (a stack, or two switches acting as one)
 counts as the virtual chassis: the chassis has the uplinks, and runs on

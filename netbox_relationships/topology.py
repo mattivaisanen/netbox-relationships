@@ -117,14 +117,16 @@ class Links:
         up_tag, down_tag = tag_slugs()
 
         mine = self._devices(self.nodes)
-        rows = Interface.objects.filter(device_id__in=mine, _path__isnull=False)
+        # Management-only (out-of-band) ports never make uplinks, at either end.
+        rows = Interface.objects.filter(device_id__in=mine, _path__isnull=False, mgmt_only=False)
         near = {pk: (device_id, path_id) for pk, device_id, path_id in rows.values_list('pk', 'device_id', '_path_id')}
         far_ends = self._far_ends({pk: path_id for pk, (_, path_id) in near.items()})
 
         # Far interfaces and circuit terminations, resolved to nodes.
         far_interfaces = {pk for ends in far_ends.values() for ct, pk in ends if ct == interface_ct}
         far_terms = {pk for ends in far_ends.values() for ct, pk in ends if ct == circuit_term_ct}
-        far_device_of = dict(Interface.objects.filter(pk__in=far_interfaces).values_list('pk', 'device_id'))
+        far_device_of = dict(
+            Interface.objects.filter(pk__in=far_interfaces, mgmt_only=False).values_list('pk', 'device_id'))
         circuit_of = dict(CircuitTermination.objects.filter(pk__in=far_terms).values_list('pk', 'circuit_id'))
         theirs = self._devices({(DEVICE, pk) for pk in far_device_of.values()})
 

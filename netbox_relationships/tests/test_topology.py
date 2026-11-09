@@ -84,3 +84,14 @@ class UplinkTests(TestCase):
                 tier.roles.set([DeviceRole.objects.get(slug=slug)])
         edge = EdgeIndex.objects.get(origin='cables')
         self.assertEqual((edge.source_id, edge.target_id), (self.pair.pk, self.access.pk))
+
+    def test_management_ports_make_no_uplinks(self):
+        # An out-of-band port cabled to another switch is not a network uplink.
+        site = self.access.site
+        mgmt_switch = Device.objects.create(name='oob', site=site, device_type=self.access.device_type,
+                                            role=DeviceRole.objects.get(slug='distribution'))
+        mgmt = Interface.objects.create(device=self.access, name='mgmt0', type='1000base-t', mgmt_only=True)
+        Cable(a_terminations=[mgmt],
+              b_terminations=[Interface.objects.create(device=mgmt_switch, name='p1', type='1000base-t')]).save()
+        rebuild()
+        self.assertFalse(EdgeIndex.objects.filter(origin='cables', target_id=mgmt_switch.pk).exists())

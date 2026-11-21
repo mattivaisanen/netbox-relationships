@@ -17,7 +17,6 @@ from utilities.views import ConditionalLoginRequiredMixin, register_model_view
 from . import filtersets, forms, impact, servicemap, settings, tables, tabs
 from .choices import ImpactChoices
 from .constants import COMMON_TYPES, MANUAL
-from .edges import rebuild
 from .graph import EDGE_FIELDS, key, parse_key, resolve
 from .models import EdgeIndex, LogicalService, NetworkTier, Relationship, RelationshipType
 
@@ -472,14 +471,33 @@ class LinkListView(ConditionalLoginRequiredMixin, View):
 
 
 class RebuildIndexView(ConditionalLoginRequiredMixin, View):
-    """Rebuilds the whole index now (the same as the nightly job)."""
+    """
+    Queues a full rebuild of the index (the nightly job, run now). It runs
+    in NetBox's background worker, not in this request: on a large NetBox a
+    rebuild can take longer than the web server waits for a response.
+    """
 
     def post(self, request):
+        from core.choices import JobStatusChoices
+        from core.models import Job
+
+        from .jobs import RebuildRelationshipIndexJob
+
         if not request.user.has_perm('netbox_relationships.change_relationship'):
             return HttpResponseForbidden()
-        counts = rebuild()
-        messages.success(request, ngettext(
-            'Rebuilt: %(n)d link.', 'Rebuilt: %(n)d links.', sum(counts.values())) % {'n': sum(counts.values())})
+        # One at a time: a second click while a rebuild waits or runs adds nothing.
+        # (The nightly run sits there as "scheduled" and doesn't count.)
+        waiting = Job.objects.filter(
+            name=RebuildRelationshipIndexJob.name,
+            status__in=[JobStatusChoices.STATUS_PENDING, JobStatusChoices.STATUS_RUNNING],
+        ).exists()
+        if not waiting:
+            RebuildRelationshipIndexJob.enqueue(user=request.user)
+            messages.success(request, _(
+                'Rebuild started in the background. Reload this page in a moment to see the links.'
+            ))
+        else:
+            messages.info(request, _('A rebuild is already waiting or running.'))
         return redirect('plugins:netbox_relationships:link_list')
 
 

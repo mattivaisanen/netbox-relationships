@@ -24,7 +24,8 @@ How the plugin is put together, and why.
 | `topology.py` | Turns network cable paths into uplinks, peer links or plain connections, using the `network_tiers` setting. |
 | `paths.py` | "Path to the top" on the Relationships tab: chains, single points of failure, redundant objects. |
 | `edges.py` | Writes `EdgeIndex` rows: one relationship, one provider for some objects, or a full rebuild. |
-| `signals.py` | Keeps the index current: relationship save/delete, provider-watched models, removal of an object's relationships when it is deleted, and a full rebuild after `migrate`. |
+| `signals.py` | Keeps the index current: relationship save/delete, provider-watched models, removal of an object's relationships when it is deleted, and a full rebuild after `migrate` when needed. |
+| `integrations.py` | Optional netbox-change-approval support: which relationships still wait for approval. |
 | `jobs.py`, `management/commands/` | Nightly rebuild job, `rebuild_relationship_index`, `prepare_relationships_uninstall`. |
 | `graph.py` | Walks the index around objects and returns nodes and edges the user may see. |
 | `impact.py` | Failure propagation and the "why" chain. |
@@ -111,10 +112,52 @@ and loads all of their rows in one query.
 fails each object in it in memory (`paths.simulate`, same rules) to find
 single points of failure. No queries per candidate.
 
+## Signals
+
+All receivers are connected from `ready()` with a `dispatch_uid` of the
+form `netbox_relationships:<what>`, and always with a sender.
+
+- **Deletes.** Any object can be a relationship end, so `pre_delete` is
+  connected once per installed model, skipping Django internals, NetBox's
+  change log and users, and this plugin's own tables (except
+  `LogicalService`). The receiver first checks the index (one `exists()`
+  query) and returns when nothing touches the object.
+- **Relationships of a deleted object** are deleted with a Django
+  `Collector` whose `origin` is the outer delete's origin, not with
+  `rel.delete()`. Signals and the change log work as usual. netbox-change-
+  approval gates a delete by its `origin`, so it treats these as part of
+  the delete the user asked for (already let through, or refused as a
+  whole) instead of as separate deletes that each need approval. Nothing
+  is needed on change-approval's side for this.
+- **After `migrate`** the index is rebuilt only when this plugin's
+  migrations were in the plan or the index is empty. netbox-docker runs
+  `migrate` on every start, so a plain restart skips the rebuild.
+- **Rebuild now** enqueues `RebuildRelationshipIndexJob` instead of
+  rebuilding in the request, and skips it when one is already pending or
+  running.
+
+## netbox-change-approval
+
+With change-approval installed, a new relationship is saved at once and
+its create request stays pending. Its index row exists like any other.
+At query time, `integrations.pending_relationship_ids()` gives the ids of
+relationships with a pending *create* request, as a subquery:
+
+- impact analysis and path to the top exclude them (`Filters(exclude_pending=True)`);
+- `graph.build()` marks their edges `pending: true`, drawn orange and dashed.
+
+Nothing is stored, so approving or rejecting a request needs no index
+update (a rejected create deletes the relationship, which drops its row).
+Pending edits and deletes don't change the stored relationship until
+approved, so they need nothing either.
+
 ## Tests
 
 `python manage.py test netbox_relationships` from NetBox's `netbox/`
 folder. The suite is small on purpose: validation, index updates,
 impact propagation with redundancy, per-link impact, one derived provider,
-uplinks through a patch panel to a virtual chassis, and the uninstall
-command.
+uplinks through a patch panel to a virtual chassis, the uninstall
+command, delete cleanup, rebuild after migrate, the Rebuild button and
+pending relationships (change-approval stubbed out).
+
+`ruff check .` uses the settings in `pyproject.toml`.

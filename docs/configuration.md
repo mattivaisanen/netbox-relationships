@@ -104,5 +104,5 @@ tag the interface: `uplink` on the interface of the device that needs the
 far end, or `downlink` on the other side.
 
 After changing the setting, run `rebuild_relationship_index` (or **All
-links → Rebuild now**). Tiers changed in the UI, and later cable, role and
+links → Rebuild now**, which runs in the background worker). Tiers changed in the UI, and later cable, role and
 tag changes, update the links by themselves.

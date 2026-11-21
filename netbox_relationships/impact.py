@@ -90,7 +90,7 @@ def analyse(user, failed, include_planned=None):
     statuses = [StatusChoices.ACTIVE, StatusChoices.DECOMMISSIONING]
     if include_planned:
         statuses.append(StatusChoices.PLANNED)
-    filters = Filters(statuses=statuses, impacting_only=True)
+    filters = Filters(statuses=statuses, impacting_only=True, exclude_pending=True)
     max_nodes = int(settings.get('max_nodes'))
 
     failed = set(failed)

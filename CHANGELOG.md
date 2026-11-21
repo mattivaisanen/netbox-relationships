@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.1 (2026-11-21)
+
+New:
+
+- With netbox-change-approval installed, relationships waiting for
+  approval show in graphs as orange dashed lines and no longer count in
+  impact analysis or path to the top.
+
+Fixed:
+
+- Deleting an object with relationships no longer needs a separate
+  approval for each relationship in netbox-change-approval: they are
+  part of the one delete.
+- Restarting NetBox (which runs `migrate`) no longer rebuilds the whole
+  link index every time; it rebuilds only when the plugin's migrations
+  ran or the index is empty.
+- **Rebuild now** runs in the background worker, so it can't time out on
+  a large NetBox.
+- Deleting objects that can never have relationships (change log entries,
+  users, sessions) no longer runs the plugin's check.
+
 ## 0.2.0 (2026-11-09)
 
 New:

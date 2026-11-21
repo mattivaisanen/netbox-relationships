@@ -60,11 +60,14 @@ cluster's hosts, a virtual chassis' members and a device's power supplies.
 
 **Relationships → All Links** lists every link: the ones added by hand and
 the ones worked out from NetBox, with their origin. Filter by origin or
-impact. **Rebuild now** works out every link from NetBox again (the same
-runs nightly and after `manage.py migrate`).
+impact. **Rebuild now** works out every link from NetBox again, in
+NetBox's background worker (`netbox-rq` must be running); reload the page
+after a moment. The same runs nightly, and after `manage.py migrate` when
+the plugin's migrations ran or the index is empty.
 
 When an object is deleted, its relationships are deleted with it and the
-change log records each one.
+change log records each one. With netbox-change-approval, they count as
+part of that delete: no separate approval is needed for them.
 
 ## Logical services
 
@@ -134,7 +137,9 @@ Each affected object shows the chain back to the failed object. The summary
 lists affected business services, owners and tenants. Choose **Maintenance**
 to plan downtime; the result is the same, only the wording changes.
 Relationships with status *planned* are left out unless you tick
-**Include planned**.
+**Include planned**. Relationships still waiting for approval in
+netbox-change-approval are always left out; graphs show them as orange
+dashed lines.
 
 ## Service map
 

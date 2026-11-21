@@ -24,7 +24,7 @@
       {% if can_rebuild %}
         <form method="post" action="{% url 'plugins:netbox_relationships:rebuild_index' %}" class="d-inline">
           {% csrf_token %}
-          <button type="submit" class="btn btn-sm btn-outline-secondary" title="{% trans 'Work out every link from NetBox data again. Runs nightly by itself.' %}"><i class="mdi mdi-refresh"></i> {% trans "Rebuild now" %}</button>
+          <button type="submit" class="btn btn-sm btn-outline-secondary" title="{% trans 'Work out every link from NetBox data again, in the background. Runs nightly by itself.' %}"><i class="mdi mdi-refresh"></i> {% trans "Rebuild now" %}</button>
         </form>
       {% endif %}
     </div>

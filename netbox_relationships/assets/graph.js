@@ -66,6 +66,10 @@
       {selector: 'edge[origin = "netbox"][group = ""]', style: {'line-style': 'dotted'}},
       {selector: 'edge[status = "planned"]', style: {'line-style': 'dashed', 'line-dash-pattern': [8, 5]}},
       {selector: 'edge[impact = "hard"][origin = "manual"]', style: {'width': 2.5}},
+      // Waiting for approval in netbox-change-approval: drawn, but not counted in impact.
+      {selector: 'edge[?pending]', style: {
+        'line-style': 'dashed', 'line-dash-pattern': [4, 4], 'line-color': '#f59f00', 'target-arrow-color': '#f59f00'
+      }},
       {selector: '.nbr-faded', style: {'opacity': 0.18}},
       {selector: 'node.nbr-picked', style: {'border-width': 4, 'border-color': '#f59f00'}}
     ];
@@ -320,6 +324,7 @@
         var text = json.nodes.length + ' objects, ' + json.edges.length + ' links.';
         if (json.edges.length === 0) { text = container.dataset.empty; }
         if (json.truncated) { text += ' ' + container.dataset.truncated; }
+        if (json.edges.some(function (e) { return e.pending; })) { text += ' ' + container.dataset.pending; }
         status.textContent = text;
       }).catch(function (error) {
         status.textContent = String(error);

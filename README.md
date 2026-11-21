@@ -45,9 +45,13 @@ Use it to answer two questions:
 Graphs and impact results only show objects the user may view. Others
 appear as "Hidden object".
 
+Works alongside netbox-change-approval when it is installed: a relationship
+waiting for approval is drawn in graphs as pending and does not count in
+impact analysis until it is approved.
+
 ## Requirements
 
-- NetBox 4.7 or later.
+- NetBox 4.7 or later (tested on 4.7.0).
 - No other plugins or Python packages. The graph library (Cytoscape.js) is
   bundled; nothing is loaded from the internet.
 
@@ -77,7 +81,8 @@ pip install --upgrade --force-reinstall --no-deps git+https://github.com/mattiva
 cd /opt/netbox/netbox && python manage.py migrate
 ```
 
-Then restart NetBox. `migrate` also rebuilds the plugin's link index. The
+Then restart NetBox. When the upgrade brings a migration, `migrate` also
+rebuilds the plugin's link index. The
 [changelog](CHANGELOG.md) lists what each version needs.
 
 ## Uninstalling

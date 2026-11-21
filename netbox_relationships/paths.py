@@ -86,7 +86,9 @@ def analyse(user, node):
     'single_points': [node dict], 'spares': [node dict], 'truncated': bool}.
     Empty chains when the object needs nothing.
     """
-    filters = Filters(statuses=[StatusChoices.ACTIVE, StatusChoices.DECOMMISSIONING], impacting_only=True)
+    filters = Filters(
+        statuses=[StatusChoices.ACTIVE, StatusChoices.DECOMMISSIONING], impacting_only=True, exclude_pending=True,
+    )
     hops, edges, truncated = walk({node}, DOWN, int(settings.get('max_depth')), filters,
                                   int(settings.get('max_nodes')))
     rows = [row for row in edges.values() if not row['symmetric']]

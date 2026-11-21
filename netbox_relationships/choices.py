@@ -102,9 +102,11 @@ class ImpactStateChoices(ChoiceSet):
     FAILED = 'failed'
     DOWN = 'down'
     DEGRADED = 'degraded'
+    AT_RISK = 'at_risk'
 
     CHOICES = (
         (FAILED, _('Failed'), 'black'),
         (DOWN, _('Down'), 'red'),
         (DEGRADED, _('Degraded'), 'orange'),
+        (AT_RISK, _('At risk'), 'yellow'),
     )

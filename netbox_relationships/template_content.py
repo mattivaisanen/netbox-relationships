@@ -49,24 +49,26 @@ class ObjectRelationships(PluginTemplateExtension):
             return ''
         request = self.context['request']
         rows = _memo(request, ('rows', obj._meta.label_lower, obj.pk), lambda: rows_for(request.user, obj))
-        needs = rows['needs'] + rows['derived_needs']
-        needed_by = rows['needed_by'] + rows['derived_needed_by']
-        top = sorted(
-            (row for row in needed_by if not row['other']['hidden']),
-            key=lambda row: _CRITICALITY_RANK.get(row['criticality_value'], 9),
-        )[:3]
+        ranked = sorted(
+            (row for row in rows['needs'] + rows['needed_by'] if not row['other']['hidden']),
+            key=lambda row: (not row['manual'], _CRITICALITY_RANK.get(row['criticality_value'], 9)),
+        )
         ct = ContentType.objects.get_for_model(obj)
         has_tabs = type(obj) in tab_models()
+        object_key = f'{ct.pk}:{obj.pk}'
+        add_many = reverse('plugins:netbox_relationships:relationship_add_many')
+        all_rows = rows['needs'] + rows['needed_by'] + rows['other']
         return self.render('netbox_relationships/inc/card.html', extra_context={
-            'needs_count': len(needs),
-            'needed_by_count': len(needed_by),
-            'top': top,
-            'add_url': (
-                f"{reverse('plugins:netbox_relationships:relationship_add')}"
-                f"?source_content_type={ct.pk}&source_object_id={obj.pk}&return_url={request.path}"
-            ),
+            'needs_count': len(rows['needs']),
+            'needed_by_count': len(rows['needed_by']),
+            'other_count': len(rows['other']),
+            'derived_count': sum(1 for row in all_rows if not row['manual']),
+            'top': ranked[:5],
+            'add_needs_url': f'{add_many}?object={object_key}&direction=needs&return_url={request.path}',
+            'add_needed_by_url': f'{add_many}?object={object_key}&direction=needed_by&return_url={request.path}',
+            'tab_url': _tab_url(obj, 'relationships') if has_tabs else None,
             'graph_url': _tab_url(obj, 'dependency_graph') if has_tabs else None,
-            'impact_url': f"{reverse('plugins:netbox_relationships:impact')}?object={ct.pk}:{obj.pk}",
+            'impact_url': f"{reverse('plugins:netbox_relationships:impact')}?object={object_key}",
             'can_add': request.user.has_perm('netbox_relationships.add_relationship'),
         })
 
@@ -89,4 +91,15 @@ def _tab_url(obj, name):
         return None
 
 
-template_extensions = [ObjectRelationships]
+class RelationshipTypeButtons(PluginTemplateExtension):
+    """"Add common types" on the relationship types list."""
+    models = ['netbox_relationships.relationshiptype']
+
+    def list_buttons(self):
+        request = self.context['request']
+        if not request.user.has_perm('netbox_relationships.add_relationshiptype'):
+            return ''
+        return self.render('netbox_relationships/inc/add_common_types.html')
+
+
+template_extensions = [ObjectRelationships, RelationshipTypeButtons]

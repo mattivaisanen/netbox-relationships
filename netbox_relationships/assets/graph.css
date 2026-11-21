@@ -49,3 +49,6 @@ a.nbr-box:hover { border-color: #2f6fdf; text-decoration: none; }
 .nbr-state-failed small { color: #fff !important; }
 .nbr-chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
 .nbr-hop { padding: 2px 8px; border: 1px solid var(--tblr-border-color, #c9cfda); border-radius: 6px; }
+.nbr-state-at_risk { background: rgba(202, 160, 0, .12) !important; border-color: #b8860b !important; }
+.nbr-line-group { border-top-width: 3px; border-top-style: double; }
+.nbr-g-chassis { background: rgba(59, 130, 196, .08); border-color: #3b82c4; border-style: dashed; }

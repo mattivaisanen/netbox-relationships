@@ -15,9 +15,14 @@ menu = PluginMenu(
         (_('Relationships'), (
             PluginMenuItem(
                 link='plugins:netbox_relationships:relationship_list',
-                link_text=_('Relationships'),
+                link_text=_('Manual Relationships'),
                 permissions=['netbox_relationships.view_relationship'],
                 buttons=_add('plugins:netbox_relationships:relationship_add', 'netbox_relationships.add_relationship'),
+            ),
+            PluginMenuItem(
+                link='plugins:netbox_relationships:link_list',
+                link_text=_('All Links'),
+                permissions=['netbox_relationships.view_relationship'],
             ),
             PluginMenuItem(
                 link='plugins:netbox_relationships:logicalservice_list',
@@ -41,6 +46,12 @@ menu = PluginMenu(
             ),
         )),
         (_('Setup'), (
+            PluginMenuItem(
+                link='plugins:netbox_relationships:networktier_list',
+                link_text=_('Network Tiers'),
+                permissions=['netbox_relationships.view_networktier'],
+                buttons=_add('plugins:netbox_relationships:networktier_add', 'netbox_relationships.add_networktier'),
+            ),
             PluginMenuItem(
                 link='plugins:netbox_relationships:relationshiptype_list',
                 link_text=_('Relationship Types'),

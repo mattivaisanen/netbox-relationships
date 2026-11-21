@@ -1,5 +1,5 @@
 """Reads PLUGINS_CONFIG['netbox_relationships'], falling back to default_settings."""
-from netbox.plugins import get_plugin_config
+from netbox.plugins.utils import get_plugin_config
 
 PLUGIN = 'netbox_relationships'
 

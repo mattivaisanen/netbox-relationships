@@ -34,7 +34,7 @@
           <div class="nbr-group{% if item.node.state %} nbr-state-{{ item.node.state }}{% endif %}">
             <div class="d-flex justify-content-between gap-2 fw-semibold">
               {% if item.node.url %}<a href="{{ item.node.url }}">{{ item.node.label }}</a>{% else %}{{ item.node.label }}{% endif %}
-              {% if item.node.state %}<span class="badge text-bg-{% if item.node.state == 'degraded' %}orange{% else %}red{% endif %}">{{ item.node.state }}</span>{% endif %}
+              {% if item.node.state %}<span class="badge text-bg-{% if item.node.state == 'degraded' %}orange{% elif item.node.state == 'at_risk' %}yellow{% else %}red{% endif %}">{{ item.node.state }}</span>{% endif %}
             </div>
             <div class="nbr-group-items">
               {% for child in item.children %}{% include 'netbox_relationships/inc/box.html' with node=child %}{% endfor %}
@@ -44,7 +44,10 @@
           {% include 'netbox_relationships/inc/box.html' with node=item.node %}
         {% endif %}
       {% empty %}
-        <span class="text-muted">{% trans "No logical services yet." %} <a href="{% url 'plugins:netbox_relationships:logicalservice_add' %}">{% trans "Add one" %}</a></span>
+        <span class="text-muted">
+          {% trans "No logical services yet. The service map starts from a business service or application and draws everything it needs, layer by layer. Add one, then link it to the VMs, devices or NetBox services it runs on." %}
+          <a href="{% url 'plugins:netbox_relationships:logicalservice_add' %}">{% trans "Add a logical service" %}</a>
+        </span>
       {% endfor %}
     </div>
   </div>

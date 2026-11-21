@@ -4,7 +4,7 @@ from django.utils.translation import gettext_lazy as _
 from netbox.tables import OrganizationalModelTable, PrimaryModelTable, columns
 from tenancy.tables import TenancyColumnsMixin
 
-from .models import LogicalService, Relationship, RelationshipType
+from .models import LogicalService, NetworkTier, Relationship, RelationshipType
 
 
 class RelationshipTypeTable(OrganizationalModelTable):
@@ -75,3 +75,15 @@ class LogicalServiceTable(TenancyColumnsMixin, PrimaryModelTable):
             'description', 'tags', 'created', 'last_updated',
         )
         default_columns = ('pk', 'name', 'kind', 'parent', 'status', 'criticality', 'tenant')
+
+
+class NetworkTierTable(OrganizationalModelTable):
+    level = tables.Column(verbose_name=_('Level'))
+    name = tables.Column(linkify=True)
+    roles = columns.ManyToManyColumn(linkify_item=True, verbose_name=_('Device roles'))
+    tags = columns.TagColumn(url_name='plugins:netbox_relationships:networktier_list')
+
+    class Meta(OrganizationalModelTable.Meta):
+        model = NetworkTier
+        fields = ('pk', 'id', 'level', 'name', 'slug', 'roles', 'description', 'tags', 'created', 'last_updated')
+        default_columns = ('pk', 'level', 'name', 'roles', 'description')

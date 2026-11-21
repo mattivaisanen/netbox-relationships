@@ -6,7 +6,7 @@ from netbox.api.authentication import IsAuthenticatedOrLoginNotRequired
 from netbox.api.viewsets import NetBoxModelViewSet
 
 from .. import filtersets, graph, impact
-from ..models import LogicalService, Relationship, RelationshipType
+from ..models import LogicalService, NetworkTier, Relationship, RelationshipType
 from . import serializers
 
 PERMISSION = 'netbox_relationships.view_relationship'
@@ -28,6 +28,12 @@ class LogicalServiceViewSet(NetBoxModelViewSet):
     queryset = LogicalService.objects.select_related('parent', 'tenant').prefetch_related('tags')
     serializer_class = serializers.LogicalServiceSerializer
     filterset_class = filtersets.LogicalServiceFilterSet
+
+
+class NetworkTierViewSet(NetBoxModelViewSet):
+    queryset = NetworkTier.objects.prefetch_related('roles', 'tags')
+    serializer_class = serializers.NetworkTierSerializer
+    filterset_class = filtersets.NetworkTierFilterSet
 
 
 def _objects(values):

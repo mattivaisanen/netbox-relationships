@@ -56,3 +56,13 @@ class ImpactTests(TestCase):
     def test_nothing_above_is_untouched(self):
         needs(self.app, self.db)
         self.assertEqual(self.states(self.app), {})
+
+    def test_redundancy_group_is_at_risk_until_every_member_fails(self):
+        needs(self.app, self.db, group='databases')
+        needs(self.app, self.disk, group='databases')
+        self.assertEqual(self.states(self.db), {'app': 'at_risk'})
+        self.assertEqual(self.states(self.db, self.disk), {'app': 'down'})
+
+    def test_a_link_can_overrule_the_impact_of_its_type(self):
+        needs(self.app, self.db, impact='soft')
+        self.assertEqual(self.states(self.db), {'app': 'degraded'})

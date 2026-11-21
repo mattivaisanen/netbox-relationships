@@ -1,0 +1,37 @@
+{% load i18n %}
+<div class="card">
+  <h2 class="card-header">{% trans "Path to the top" %} <span class="text-muted fw-normal fs-6">&middot; {% trans "everything this object stands on, and what it can't lose" %}</span></h2>
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <div class="small text-uppercase text-muted mb-1">{% trans "Single points of failure" %}</div>
+        {% for node in paths.single_points %}
+          <span class="badge text-bg-red fw-normal me-1 mb-1">{% if node.url %}<a class="text-reset" href="{{ node.url }}">{{ node.label }}</a>{% else %}{{ node.label }}{% endif %}</span>
+        {% empty %}
+          <span class="text-success"><i class="mdi mdi-check-circle-outline"></i> {% trans "None: no single object takes this one down." %}</span>
+        {% endfor %}
+        {% if paths.single_points %}<div class="small text-muted mt-1">{% trans "Losing any one of these takes this object down." %}</div>{% endif %}
+      </div>
+      <div class="col-md-6">
+        <div class="small text-uppercase text-muted mb-1">{% trans "Redundant" %}</div>
+        {% for node in paths.spares %}
+          <span class="badge text-bg-yellow fw-normal me-1 mb-1">{% if node.url %}<a class="text-reset" href="{{ node.url }}">{{ node.label }}</a>{% else %}{{ node.label }}{% endif %}</span>
+        {% empty %}
+          <span class="text-muted">{% trans "Nothing has a spare." %}</span>
+        {% endfor %}
+        {% if paths.spares %}<div class="small text-muted mt-1">{% trans "Losing one of these leaves this object working, but at risk." %}</div>{% endif %}
+      </div>
+    </div>
+    <div class="small text-uppercase text-muted mb-1">{% trans "Chains" %}</div>
+    <ul class="list-unstyled mb-0">
+      {% for chain in paths.chains %}
+        <li class="py-1 border-bottom">
+          <span class="text-muted">{{ object }}</span>
+          {% for node in chain %}<i class="mdi mdi-chevron-right text-muted"></i>{% if node.url %}<a href="{{ node.url }}">{{ node.label }}</a>{% else %}<span class="text-muted">{{ node.label }}</span>{% endif %}{% endfor %}
+        </li>
+      {% endfor %}
+    </ul>
+    {% if paths.more %}<div class="small text-muted mt-2">{% blocktrans with n=paths.more %}And {{ n }} more chains.{% endblocktrans %}</div>{% endif %}
+    {% if paths.truncated %}<div class="small text-warning mt-2">{% trans "Cut short: more objects than the max_nodes setting allows." %}</div>{% endif %}
+  </div>
+</div>

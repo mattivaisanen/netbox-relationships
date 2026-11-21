@@ -5,6 +5,8 @@ The plugin's models.
 - Relationship: one link, entered by hand, between any two objects.
 - LogicalService: a business service, application or external service,
   for things NetBox has no object for.
+- NetworkTier: a level of the network (core, edge...) made of device roles;
+  decides which end of a network cable needs the other.
 - EdgeIndex: every link in one narrow table, hand-made and derived from
   NetBox's own data. Internal: it is what graphs and impact analysis read.
 """
@@ -20,7 +22,12 @@ from netbox.models.features import ContactsMixin
 from utilities.fields import ColorField
 
 from .choices import (
-    CardinalityChoices, CategoryChoices, CriticalityChoices, ImpactChoices, ServiceKindChoices, StatusChoices,
+    CardinalityChoices,
+    CategoryChoices,
+    CriticalityChoices,
+    ImpactChoices,
+    ServiceKindChoices,
+    StatusChoices,
 )
 from .constants import MANUAL
 
@@ -97,8 +104,26 @@ class Relationship(PrimaryModel):
     criticality = models.CharField(
         verbose_name=_('criticality'), max_length=10, choices=CriticalityChoices, default=CriticalityChoices.MEDIUM,
     )
+    impact = models.CharField(
+        verbose_name=_('impact'), max_length=10, choices=ImpactChoices, blank=True,
+        help_text=_("What happens to the source when the target fails. Empty: the type's default."),
+    )
+    label = models.CharField(
+        verbose_name=_('label'), max_length=100, blank=True,
+        help_text=_('What the link is for, in a few words, such as "SQL for reporting". Shown on the graph.'),
+    )
+    group = models.CharField(
+        verbose_name=_('redundancy group'), max_length=50, blank=True,
+        help_text=_('Links from the same source with the same group name back each other up.'),
+    )
+    group_min = models.PositiveSmallIntegerField(
+        verbose_name=_('needs at least'), default=1,
+        help_text=_('How many targets of the group must work for the source to work.'),
+    )
 
-    clone_fields = ('type', 'source_type', 'source_id', 'target_type', 'status', 'criticality')
+    clone_fields = (
+        'type', 'source_type', 'source_id', 'target_type', 'status', 'criticality', 'impact', 'group', 'group_min',
+    )
 
     class Meta:
         ordering = ('type', 'source_type', 'source_id', 'target_type', 'target_id')
@@ -128,6 +153,17 @@ class Relationship(PrimaryModel):
 
     def get_criticality_color(self):
         return CriticalityChoices.colors.get(self.criticality)
+
+    @property
+    def effective_impact(self):
+        """The link's own impact, or its type's when it has none."""
+        return self.impact or (self.type.impact if self.type_id else ImpactChoices.HARD)
+
+    def get_effective_impact_display(self):
+        return dict((value, label) for value, label, *_rest in ImpactChoices.CHOICES).get(self.effective_impact)
+
+    def get_effective_impact_color(self):
+        return ImpactChoices.colors.get(self.effective_impact)
 
     def clean(self):
         super().clean()
@@ -195,6 +231,34 @@ class LogicalService(ContactsMixin, PrimaryModel):
             node = node.parent
 
 
+class NetworkTier(OrganizationalModel):
+    """
+    One level of the network, made of device roles. A cable between devices
+    in two tiers becomes "uplinks to": the device in the lower tier (higher
+    level number) needs the one above. When any tier exists, these replace
+    the `network_tiers` setting.
+    """
+    level = models.PositiveSmallIntegerField(
+        verbose_name=_('level'), unique=True,
+        help_text=_('Position from the top of the network: 1 is the top. Lower tiers have higher numbers.'),
+    )
+    roles = models.ManyToManyField(
+        to='dcim.DeviceRole', related_name='+', blank=True, verbose_name=_('device roles'),
+        help_text=_('Devices with these roles are in this tier. A role can be in one tier only.'),
+    )
+
+    class Meta:
+        ordering = ('level',)
+        verbose_name = _('network tier')
+        verbose_name_plural = _('network tiers')
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse('plugins:netbox_relationships:networktier', args=[self.pk])
+
+
 class EdgeIndex(models.Model):
     """
     One link between two objects, as graphs and impact analysis read it.
@@ -225,6 +289,15 @@ class EdgeIndex(models.Model):
     status = models.CharField(max_length=20, default=StatusChoices.ACTIVE)
     criticality = models.CharField(max_length=10, default=CriticalityChoices.MEDIUM)
     color = models.CharField(max_length=6, default='6b7690')
+    #: Redundancy group of the source: edges from one source with the same
+    #: group back each other up; the source needs `group_min` of them.
+    group = models.CharField(max_length=50, blank=True)
+    group_min = models.PositiveSmallIntegerField(default=1)
+    #: How many physical links an edge stands for (parallel cables, LAGs).
+    link_count = models.PositiveIntegerField(default=1)
+    #: Free text shown with the edge: a relationship's label, or where a
+    #: derived edge comes from.
+    note = models.CharField(max_length=200, blank=True)
 
     class Meta:
         verbose_name = _('edge')

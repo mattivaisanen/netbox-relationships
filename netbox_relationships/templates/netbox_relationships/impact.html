@@ -1,5 +1,5 @@
 {% extends 'generic/_base.html' %}
-{% load i18n %}
+{% load i18n helpers %}
 
 {% block title %}{% trans "Impact Analysis" %}{% endblock %}
 
@@ -45,17 +45,20 @@
 </form>
 
 {% if result %}
-  <div class="row row-cards mb-3">
-    <div class="col-sm-6 col-lg-3"><div class="card card-sm border-danger"><div class="card-body">
+  <div class="row row-cards row-cols-2 row-cols-lg-5 mb-3">
+    <div class="col"><div class="card card-sm border-danger"><div class="card-body">
       <div class="fs-1 fw-semibold text-danger">{{ result.summary.down }}</div><div class="text-muted">{% trans "objects go down" %}</div>
     </div></div></div>
-    <div class="col-sm-6 col-lg-3"><div class="card card-sm border-warning"><div class="card-body">
+    <div class="col"><div class="card card-sm border-warning"><div class="card-body">
       <div class="fs-1 fw-semibold text-warning">{{ result.summary.degraded }}</div><div class="text-muted">{% trans "objects degraded" %}</div>
     </div></div></div>
-    <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body">
+    <div class="col"><div class="card card-sm border-yellow"><div class="card-body">
+      <div class="fs-1 fw-semibold text-yellow">{{ result.summary.at_risk }}</div><div class="text-muted">{% trans "objects at risk (lost their spare)" %}</div>
+    </div></div></div>
+    <div class="col"><div class="card card-sm"><div class="card-body">
       <div class="fs-1 fw-semibold">{{ result.summary.business_services|length }}</div><div class="text-muted">{% trans "business services hit" %}</div>
     </div></div></div>
-    <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body">
+    <div class="col"><div class="card card-sm"><div class="card-body">
       <div class="fs-1 fw-semibold">{{ result.summary.owners|length }}</div><div class="text-muted">{% trans "owners to notify" %}{% if result.summary.owners %}: {{ result.summary.owners|join:", " }}{% endif %}</div>
     </div></div></div>
   </div>
@@ -76,17 +79,30 @@
             <tr>
               <td>{% if entry.url %}<a href="{{ entry.url }}">{{ entry.label }}</a>{% else %}<span class="text-muted">{{ entry.label }}</span>{% endif %}</td>
               <td>{{ entry.kind }}</td>
-              <td>{% if entry.state == 'down' %}<span class="badge text-bg-red">{% trans "Down" %}</span>{% else %}<span class="badge text-bg-orange">{% trans "Degraded" %}</span>{% endif %}</td>
+              <td>{% if entry.state == 'down' %}<span class="badge text-bg-red">{% trans "Down" %}</span>{% elif entry.state == 'at_risk' %}<span class="badge text-bg-yellow">{% trans "At risk" %}</span>{% else %}<span class="badge text-bg-orange">{% trans "Degraded" %}</span>{% endif %}</td>
               <td>{{ entry.hops }}</td>
               <td>{% include 'netbox_relationships/inc/chain.html' with chain=entry.chain %}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="5" class="text-muted">{% trans "Nothing else is affected." %}</td></tr>
+            <tr><td colspan="5" class="text-muted">
+              {% trans "Nothing else is affected." %}
+              {% for node in result.failed %}{% with counts=result.links|get_item:node.id %}{% if counts %}
+                <div class="mt-1">
+                  {% if counts.0 == 0 %}
+                    {% blocktrans with name=node.label %}{{ name }} has no links yet. Add relationships, or set up network tiers so its cables count (see the plugin's configuration).{% endblocktrans %}
+                  {% elif counts.1 == 0 %}
+                    {% blocktrans with name=node.label total=counts.0 %}{{ name }} has {{ total }} links, but nothing depends on it through them: they carry no impact (such as "connects to" or "related to").{% endblocktrans %}
+                  {% else %}
+                    {% blocktrans with name=node.label %}Everything that depends on {{ name }} has a spare or only depends on it through planned links.{% endblocktrans %}
+                  {% endif %}
+                </div>
+              {% endif %}{% endwith %}{% endfor %}
+            </td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
-  <p class="small text-muted">{% trans "Down: a hard dependency is lost. Degraded: only a soft dependency is lost. Objects you may not view are counted as hidden objects." %}</p>
+  <p class="small text-muted">{% trans "Down: a hard dependency is lost. Degraded: only a soft dependency is lost. At risk: still works, but has lost a spare (one of two uplinks, one host of a cluster). Objects you may not view are counted as hidden objects." %}</p>
 {% endif %}
 {% endblock %}

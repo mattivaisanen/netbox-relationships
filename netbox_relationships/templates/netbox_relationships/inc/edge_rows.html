@@ -3,21 +3,29 @@
   <table class="table table-hover mb-0">
     <thead><tr>
       <th>{% trans "Relationship" %}</th><th>{% trans "Object" %}</th><th>{% trans "Kind" %}</th>
-      <th>{% trans "Status" %}</th><th>{% trans "Criticality" %}</th><th>{% trans "Impact" %}</th>{% if manual %}<th></th>{% endif %}
+      <th>{% trans "Impact" %}</th><th>{% trans "Status" %}</th><th>{% trans "Criticality" %}</th>
+      <th>{% trans "Origin" %}</th><th></th>
     </tr></thead>
     <tbody>
       {% for row in rows %}
         <tr>
-          <td><span class="color-label" style="background-color: #{{ row.color }}">&nbsp;</span> {{ row.label }}</td>
+          <td>
+            <span class="d-inline-block rounded me-1 align-middle" style="width: 10px; height: 10px; background-color: #{{ row.color }}"></span>{{ row.label }}
+            {% if row.note %}<div class="small text-muted">{{ row.note }}</div>{% endif %}
+          </td>
           <td>{% if row.other.url %}<a href="{{ row.other.url }}">{{ row.other.label }}</a>{% else %}<span class="text-muted">{{ row.other.label }}</span>{% endif %}</td>
           <td>{{ row.other.kind }}</td>
+          <td>
+            <span class="badge text-bg-{{ row.impact.1 }}">{{ row.impact.0 }}</span>
+            {% if row.group %}<div class="small text-muted" title="{% trans 'Redundancy group' %}"><i class="mdi mdi-shield-half-full"></i> {{ row.group }} ({% blocktrans with n=row.group_min %}needs {{ n }}{% endblocktrans %})</div>{% endif %}
+          </td>
           <td><span class="badge text-bg-{{ row.status.1 }}">{{ row.status.0 }}</span></td>
-          <td>{% if manual %}<span class="badge text-bg-{{ row.criticality.1 }}">{{ row.criticality.0 }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
-          <td><span class="badge text-bg-{{ row.impact.1 }}">{{ row.impact.0 }}</span></td>
-          {% if manual %}<td class="text-end"><a href="{% url 'plugins:netbox_relationships:relationship' pk=row.relationship_id %}" class="btn btn-sm btn-outline-secondary">{% trans "View" %}</a></td>{% endif %}
+          <td>{% if row.manual %}<span class="badge text-bg-{{ row.criticality.1 }}">{{ row.criticality.0 }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+          <td>{% if row.manual %}<span class="badge text-bg-blue">{{ row.origin }}</span>{% else %}<span class="badge text-bg-secondary" title="{% trans 'Worked out from NetBox data, kept up to date automatically' %}">{% trans "NetBox" %}: {{ row.origin }}</span>{% endif %}</td>
+          <td class="text-end">{% if row.manual %}<a href="{% url 'plugins:netbox_relationships:relationship' pk=row.relationship_id %}" class="btn btn-sm btn-outline-secondary">{% trans "View" %}</a>{% endif %}</td>
         </tr>
       {% empty %}
-        <tr><td colspan="7" class="text-muted">{% trans "None" %}</td></tr>
+        <tr><td colspan="8" class="text-muted">{% trans "None" %}</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -10,11 +10,16 @@ tokens and permissions.
 | `relationship-types/` | Relationship types |
 | `relationships/` | Relationships |
 | `logical-services/` | Logical services |
+| `network-tiers/` | Network tiers (`name`, `slug`, `level`, `roles` as device role IDs) |
 
 These support the usual list, get, create, update, delete, bulk operations
 and filters. Relationships filter by `type` (slug), `type_id`, `status`,
 `category`, `criticality`, `source_type` (`dcim.device`), `source_id`, `target_type`,
 `target_id`, and `object`, which matches either end (`?object=dcim.device:7`).
+
+Relationships also have `impact` (`hard`, `soft`, `none`, or empty for the
+type's default), `label`, `group` and `group_min` (see
+[usage](usage.md#redundancy)).
 
 Create a relationship:
 
@@ -24,7 +29,7 @@ POST /api/plugins/relationships/relationships/
   "type": 1,
   "source_type": "virtualization.virtualmachine", "source_id": 12,
   "target_type": "dcim.device", "target_id": 7,
-  "criticality": "high"
+  "criticality": "high", "impact": "soft", "label": "Nightly export"
 }
 ```
 
@@ -51,7 +56,9 @@ GET /api/plugins/relationships/graph/?object=dcim.device:7&depth=3&direction=bot
 The answer has `nodes`, `edges`, `roots` and `truncated`. Each node has
 `id`, `label`, `kind`, `group`, `url`, `status`, `hops`, `root` and
 `hidden`. Each edge has `source`, `target`, `label`, `origin` (`manual` or
-`netbox`), `impact`, `symmetric`, `status` and `criticality`.
+`netbox`), `kind` (the origin key, such as `cables`), `impact`,
+`symmetric`, `status`, `criticality`, `group`, `group_min`, `link_count`
+and `note`.
 
 ## Impact
 
@@ -60,6 +67,8 @@ POST /api/plugins/relationships/impact/
 {"objects": ["dcim.device:7"], "include_planned": false}
 ```
 
-The answer has `failed`, `affected` (each with `state`: `down` or
-`degraded`, `hops` and `chain`), a `summary` (counts, business services,
-owners, tenants) and `truncated`.
+The answer has `failed`, `affected` (each with `state`: `down`,
+`degraded` or `at_risk`, `hops` and `chain`), a `summary` (counts,
+business services, owners, tenants), `truncated`, and `links`: for each
+failed object that affected nothing, how many links it has and how many
+carry impact.

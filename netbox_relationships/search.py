@@ -1,6 +1,6 @@
 from netbox.search import SearchIndex
 
-from .models import LogicalService, Relationship, RelationshipType
+from .models import LogicalService, NetworkTier, Relationship, RelationshipType
 
 
 class RelationshipTypeIndex(SearchIndex):
@@ -32,4 +32,12 @@ class LogicalServiceIndex(SearchIndex):
     display_attrs = ('kind', 'status', 'tenant')
 
 
-indexes = (RelationshipTypeIndex, RelationshipIndex, LogicalServiceIndex)
+class NetworkTierIndex(SearchIndex):
+    model = NetworkTier
+    fields = (
+        ('name', 100),
+        ('description', 500),
+    )
+
+
+indexes = (RelationshipTypeIndex, RelationshipIndex, LogicalServiceIndex, NetworkTierIndex)

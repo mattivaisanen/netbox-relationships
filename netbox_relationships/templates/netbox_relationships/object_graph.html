@@ -36,7 +36,8 @@
          data-object="{{ object_key }}"
          data-impact-url="{% url 'plugins:netbox_relationships:impact' %}"
          data-empty="{% trans 'No relationships yet.' %}"
-         data-truncated="{% trans 'Too many objects: the graph was cut short. Lower the depth or switch off links from NetBox.' %}"></div>
+         data-truncated="{% trans 'Too many objects: the graph was cut short. Lower the depth or switch off links from NetBox.' %}"
+         data-pending="{% trans 'Orange dashed links wait for approval and do not count in impact analysis.' %}"></div>
     <div class="nbr-status small text-muted mt-2" id="nbr-status" role="status"></div>
     <div class="nbr-legend small text-muted mt-2">
       <span><span class="nbr-line nbr-line-manual"></span> {% trans "Manual" %}</span>

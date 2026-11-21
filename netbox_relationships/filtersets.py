@@ -2,13 +2,14 @@ import django_filters
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
+from dcim.models import DeviceRole
 from netbox.filtersets import OrganizationalModelFilterSet, PrimaryModelFilterSet
 from tenancy.filtersets import TenancyFilterSet
 from utilities.filters import ContentTypeFilter
 
 from .choices import CategoryChoices, CriticalityChoices, ImpactChoices, ServiceKindChoices, StatusChoices
 from .graph import parse_key
-from .models import LogicalService, Relationship, RelationshipType
+from .models import LogicalService, NetworkTier, Relationship, RelationshipType
 
 
 class RelationshipTypeFilterSet(OrganizationalModelFilterSet):
@@ -36,6 +37,7 @@ class RelationshipFilterSet(PrimaryModelFilterSet):
     category = django_filters.MultipleChoiceFilter(field_name='type__category', choices=CategoryChoices)
     status = django_filters.MultipleChoiceFilter(choices=StatusChoices)
     criticality = django_filters.MultipleChoiceFilter(choices=CriticalityChoices)
+    impact = django_filters.MultipleChoiceFilter(choices=ImpactChoices)
     source_type = ContentTypeFilter()
     target_type = ContentTypeFilter()
     object = django_filters.CharFilter(
@@ -44,13 +46,14 @@ class RelationshipFilterSet(PrimaryModelFilterSet):
 
     class Meta:
         model = Relationship
-        fields = ('id', 'source_type_id', 'source_id', 'target_type_id', 'target_id', 'description')
+        fields = ('id', 'source_type_id', 'source_id', 'target_type_id', 'target_id', 'label', 'group', 'description')
 
     def search(self, queryset, name, value):
         if not value.strip():
             return queryset
         return queryset.filter(
             Q(description__icontains=value) | Q(comments__icontains=value) | Q(type__name__icontains=value)
+            | Q(label__icontains=value)
         )
 
     def filter_object(self, queryset, name, value):
@@ -72,6 +75,21 @@ class LogicalServiceFilterSet(TenancyFilterSet, PrimaryModelFilterSet):
     class Meta:
         model = LogicalService
         fields = ('id', 'name', 'link', 'description')
+
+    def search(self, queryset, name, value):
+        if not value.strip():
+            return queryset
+        return queryset.filter(Q(name__icontains=value) | Q(description__icontains=value))
+
+
+class NetworkTierFilterSet(OrganizationalModelFilterSet):
+    role_id = django_filters.ModelMultipleChoiceFilter(
+        field_name='roles', queryset=DeviceRole.objects.all(), label=_('Device role (ID)'),
+    )
+
+    class Meta:
+        model = NetworkTier
+        fields = ('id', 'name', 'slug', 'level', 'description')
 
     def search(self, queryset, name, value):
         if not value.strip():

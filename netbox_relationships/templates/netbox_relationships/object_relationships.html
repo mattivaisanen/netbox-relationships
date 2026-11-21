@@ -4,24 +4,23 @@
 {% block content %}
 <div class="d-flex flex-wrap gap-2 mb-3">
   {% if perms.netbox_relationships.add_relationship %}
-    <a class="btn btn-primary" href="{{ add_url }}"><i class="mdi mdi-plus-thick"></i> {% trans "Add relationship" %}</a>
+    <a class="btn btn-primary" href="{{ add_needs_url }}"><i class="mdi mdi-arrow-down-bold"></i> {% trans "Add what it needs" %}</a>
+    <a class="btn btn-primary" href="{{ add_needed_by_url }}"><i class="mdi mdi-arrow-up-bold"></i> {% trans "Add what needs it" %}</a>
   {% endif %}
   <a class="btn btn-outline-secondary" href="{% url 'plugins:netbox_relationships:relationship_list' %}?object={{ object_key }}">{% trans "Manage in list" %}</a>
   <a class="btn btn-outline-danger" href="{% url 'plugins:netbox_relationships:impact' %}?object={{ object_key }}"><i class="mdi mdi-flash-alert-outline"></i> {% trans "Impact" %}</a>
 </div>
 <div class="card">
-  <h2 class="card-header">{% trans "Depends on" %} <span class="text-muted fw-normal fs-6">&middot; {% trans "what this object needs" %}</span></h2>
-  {% include 'netbox_relationships/inc/edge_rows.html' with rows=rows.needs manual=True %}
+  <h2 class="card-header">{% trans "Needs" %} <span class="text-muted fw-normal fs-6">&middot; {% trans "what this object needs to work" %}</span></h2>
+  {% include 'netbox_relationships/inc/edge_rows.html' with rows=rows.needs %}
 </div>
 <div class="card">
-  <h2 class="card-header">{% trans "Required by" %} <span class="text-muted fw-normal fs-6">&middot; {% trans "what needs this object" %}</span></h2>
-  {% include 'netbox_relationships/inc/edge_rows.html' with rows=rows.needed_by manual=True %}
+  <h2 class="card-header">{% trans "Needed by" %} <span class="text-muted fw-normal fs-6">&middot; {% trans "what stops or weakens if this object fails" %}</span></h2>
+  {% include 'netbox_relationships/inc/edge_rows.html' with rows=rows.needed_by %}
 </div>
 <div class="card">
-  <h2 class="card-header">{% trans "From NetBox" %} <span class="text-muted fw-normal fs-6">&middot; {% trans "worked out from NetBox data, kept up to date automatically" %}</span></h2>
-  <div class="card-body pb-0"><h3 class="h6 text-muted">{% trans "Depends on" %}</h3></div>
-  {% include 'netbox_relationships/inc/edge_rows.html' with rows=rows.derived_needs manual=False %}
-  <div class="card-body pb-0"><h3 class="h6 text-muted">{% trans "Required by" %}</h3></div>
-  {% include 'netbox_relationships/inc/edge_rows.html' with rows=rows.derived_needed_by manual=False %}
+  <h2 class="card-header">{% trans "Other links" %} <span class="text-muted fw-normal fs-6">&middot; {% trans "connections and notes that carry no impact" %}</span></h2>
+  {% include 'netbox_relationships/inc/edge_rows.html' with rows=rows.other %}
 </div>
+{% if paths %}{% include 'netbox_relationships/inc/paths.html' %}{% endif %}
 {% endblock %}

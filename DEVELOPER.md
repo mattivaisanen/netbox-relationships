@@ -18,17 +18,20 @@ How the plugin is put together, and why.
 
 | Module | Responsibility |
 |---|---|
-| `models.py` | `RelationshipType`, `Relationship`, `LogicalService` and the `EdgeIndex` table. |
+| `models.py` | `RelationshipType`, `Relationship`, `LogicalService`, `NetworkTier` and the `EdgeIndex` table. |
 | `validation.py` | Checks run by `Relationship.clean()`: allowed types, self links, duplicates, cardinality, loops. |
 | `derived.py` | Providers that read links from NetBox data (VM → cluster, cables, power, ...). Each one lists the models it watches. |
+| `topology.py` | Turns network cable paths into uplinks, peer links or plain connections, using the `network_tiers` setting. |
+| `paths.py` | "Path to the top" on the Relationships tab: chains, single points of failure, redundant objects. |
 | `edges.py` | Writes `EdgeIndex` rows: one relationship, one provider for some objects, or a full rebuild. |
-| `signals.py` | Keeps the index current: relationship save/delete, provider-watched models, and removal of an object's relationships when it is deleted. |
+| `signals.py` | Keeps the index current: relationship save/delete, provider-watched models, removal of an object's relationships when it is deleted, and a full rebuild after `migrate` when needed. |
+| `integrations.py` | Optional netbox-change-approval support: which relationships still wait for approval. |
 | `jobs.py`, `management/commands/` | Nightly rebuild job, `rebuild_relationship_index`, `prepare_relationships_uninstall`. |
 | `graph.py` | Walks the index around objects and returns nodes and edges the user may see. |
 | `impact.py` | Failure propagation and the "why" chain. |
 | `servicemap.py` | Sorts a business service's graph into layers. |
 | `tabs.py`, `template_content.py` | Tabs, card and Impact button on other models' pages. |
-| `assets.py`, `assets/` | Cytoscape.js, `graph.js` (draws the graph, layered layout, export) and `graph.css`. |
+| `assets.py`, `assets/` | Cytoscape.js, `graph.js` (draws the graph, layered layout, export), `addmany.js` (the add-several form) and `graph.css`. |
 | `views.py`, `forms.py`, `filtersets.py`, `tables.py`, `urls.py`, `navigation.py`, `search.py`, `api/` | Standard NetBox UI and REST API. |
 | `settings.py`, `constants.py`, `choices.py` | Settings access, fixed lists, choice sets. |
 
@@ -43,7 +46,12 @@ directly. They read `EdgeIndex`, one row per link:
   object replaces only its rows.
 
 Labels, impact, symmetry and colour are copied onto each row, so a walk
-needs no joins. Changing a type updates its rows (`edges.sync_type`).
+needs no joins. Changing a type updates its rows (`edges.sync_type`),
+except the impact of relationships that set their own.
+
+Rows also carry a redundancy `group` and `group_min` (see Impact), a
+`link_count` (parallel cables folded into one link) and a `note` (a
+relationship's label, or "2 cables").
 
 The index is a cache. If it is ever wrong, `rebuild_relationship_index`
 rebuilds it from scratch; the nightly job does the same.
@@ -66,15 +74,90 @@ at `max_depth` or after `max_nodes` objects.
 restricted to what the user may view. Objects outside that become hidden
 placeholders with no name.
 
+## Network topology
+
+NetBox keeps a `CablePath` for every interface: the far end, through any
+patch panels. Tiers come from `NetworkTier` rows when any exist, else from
+the `network_tiers` setting. Saving a tier, or changing its roles, reruns
+the two uplink providers over everything once the transaction commits
+(`edges.refresh_network`). `topology.Links` reads those paths for a set of *nodes* (a
+device, or its virtual chassis if it is a member), and decides each
+link's direction from the device roles' tiers, with `uplink`/`downlink`
+interface tags overriding.
+
+Each link has exactly one owner, so a refresh rewrites only its own rows:
+the node that needs the other (an uplink), or the node with the lower key
+(peers and plain connections). Links to circuits are owned by the device
+end. Two providers share this code: `DeviceUplinkProvider` (owner: devices
+outside a chassis) and `ChassisUplinkProvider` (owner: virtual chassis).
+
+They refresh on a saved or deleted `CablePath` (both ends), a saved device
+(itself and its neighbours, since a role change can turn their links
+around) and a saved or deleted `TaggedItem` on an interface. A device
+leaving a virtual chassis is picked up by the nightly rebuild.
+
 ## Impact
 
 `impact.analyse()` walks *up* from the failed objects over rows with impact
-`hard` or `soft`. States only get worse (degraded → down), so each object
-changes state at most twice and the walk ends. Each affected object keeps
-the row that last set its state; following those back gives the chain.
+`hard` or `soft`. States only get worse (at risk → degraded → down), so
+the walk ends. Each affected object keeps the row that last set its state;
+following those back gives the chain.
+
+Hard rows with a `group` count together per source: the source goes down
+when fewer than `group_min` of the group's targets still work, and is *at
+risk* while any of them is lost. Each round collects the groups it touched
+and loads all of their rows in one query.
+
+`paths.analyse()` loads an object's whole dependency subgraph once, then
+fails each object in it in memory (`paths.simulate`, same rules) to find
+single points of failure. No queries per candidate.
+
+## Signals
+
+All receivers are connected from `ready()` with a `dispatch_uid` of the
+form `netbox_relationships:<what>`, and always with a sender.
+
+- **Deletes.** Any object can be a relationship end, so `pre_delete` is
+  connected once per installed model, skipping Django internals, NetBox's
+  change log and users, and this plugin's own tables (except
+  `LogicalService`). The receiver first checks the index (one `exists()`
+  query) and returns when nothing touches the object.
+- **Relationships of a deleted object** are deleted with a Django
+  `Collector` whose `origin` is the outer delete's origin, not with
+  `rel.delete()`. Signals and the change log work as usual. netbox-change-
+  approval gates a delete by its `origin`, so it treats these as part of
+  the delete the user asked for (already let through, or refused as a
+  whole) instead of as separate deletes that each need approval. Nothing
+  is needed on change-approval's side for this.
+- **After `migrate`** the index is rebuilt only when this plugin's
+  migrations were in the plan or the index is empty. netbox-docker runs
+  `migrate` on every start, so a plain restart skips the rebuild.
+- **Rebuild now** enqueues `RebuildRelationshipIndexJob` instead of
+  rebuilding in the request, and skips it when one is already pending or
+  running.
+
+## netbox-change-approval
+
+With change-approval installed, a new relationship is saved at once and
+its create request stays pending. Its index row exists like any other.
+At query time, `integrations.pending_relationship_ids()` gives the ids of
+relationships with a pending *create* request, as a subquery:
+
+- impact analysis and path to the top exclude them (`Filters(exclude_pending=True)`);
+- `graph.build()` marks their edges `pending: true`, drawn orange and dashed.
+
+Nothing is stored, so approving or rejecting a request needs no index
+update (a rejected create deletes the relationship, which drops its row).
+Pending edits and deletes don't change the stored relationship until
+approved, so they need nothing either.
 
 ## Tests
 
 `python manage.py test netbox_relationships` from NetBox's `netbox/`
 folder. The suite is small on purpose: validation, index updates,
-impact propagation, one derived provider and the uninstall command.
+impact propagation with redundancy, per-link impact, one derived provider,
+uplinks through a patch panel to a virtual chassis, the uninstall
+command, delete cleanup, rebuild after migrate, the Rebuild button and
+pending relationships (change-approval stubbed out).
+
+`ruff check .` uses the settings in `pyproject.toml`.

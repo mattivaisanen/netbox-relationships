@@ -17,7 +17,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 from django.utils.translation import gettext as _
 
-from . import settings
+from . import integrations, settings
 from .choices import ServiceKindChoices
 from .constants import MANUAL
 from .models import EdgeIndex
@@ -27,6 +27,7 @@ DOWN, UP, BOTH = 'down', 'up', 'both'
 EDGE_FIELDS = (
     'pk', 'source_type_id', 'source_id', 'target_type_id', 'target_id', 'origin', 'relationship_id',
     'rtype_id', 'label', 'reverse_label', 'impact', 'symmetric', 'status', 'criticality', 'color',
+    'group', 'group_min', 'link_count', 'note',
 )
 
 
@@ -56,11 +57,13 @@ def object_key(obj):
 class Filters:
     """What a walk may follow."""
 
-    def __init__(self, derived=True, statuses=None, rtypes=None, impacting_only=False):
+    def __init__(self, derived=True, statuses=None, rtypes=None, impacting_only=False, exclude_pending=False):
         self.derived = derived
         self.statuses = statuses
         self.rtypes = rtypes
         self.impacting_only = impacting_only
+        # Leave out relationships still waiting for approval (see integrations.py).
+        self.exclude_pending = exclude_pending
 
     def apply(self, queryset):
         if not self.derived:
@@ -71,7 +74,20 @@ class Filters:
             queryset = queryset.filter(Q(rtype_id__in=self.rtypes) | ~Q(origin=MANUAL))
         if self.impacting_only:
             queryset = queryset.exclude(impact='none')
+        if self.exclude_pending:
+            pending = integrations.pending_relationship_ids()
+            if pending is not None:
+                queryset = queryset.exclude(relationship_id__in=pending)
         return queryset
+
+
+def pending_ids(relationship_ids):
+    """The subset of these relationship ids still waiting for approval."""
+    relationship_ids = {pk for pk in relationship_ids if pk}
+    pending = integrations.pending_relationship_ids() if relationship_ids else None
+    if pending is None:
+        return set()
+    return set(pending.filter(object_id__in=relationship_ids).values_list('object_id', flat=True))
 
 
 def _frontier_q(frontier, side):
@@ -151,6 +167,7 @@ def _node_group(obj, model):
         'virtualization.cluster': 'cluster',
         'ipam.service': 'service',
         'dcim.device': 'device',
+        'dcim.virtualchassis': 'chassis',
         'circuits.circuit': 'circuit',
         'dcim.powerfeed': 'power',
         'dcim.powerpanel': 'power',
@@ -184,6 +201,8 @@ def resolve(user, node_ids):
             queryset = model.objects.all()
             if hasattr(queryset, 'restrict'):
                 queryset = queryset.restrict(user, 'view')
+            if model._meta.label_lower == 'dcim.device':
+                queryset = queryset.select_related('role')
             visible = {obj.pk: obj for obj in queryset.filter(pk__in=pks)}
         for pk in pks:
             obj = visible.get(pk)
@@ -195,6 +214,8 @@ def resolve(user, node_ids):
                 continue
             status, status_color = _status(obj)
             kind = obj.get_kind_display() if hasattr(obj, 'get_kind_display') else model._meta.verbose_name
+            if getattr(obj, 'role', None) is not None and model._meta.label_lower == 'dcim.device':
+                kind = obj.role.name  # "Access switch" says more than "Device".
             try:
                 url = obj.get_absolute_url()
             except Exception:
@@ -207,7 +228,8 @@ def resolve(user, node_ids):
     return nodes
 
 
-def edge_dict(row):
+def edge_dict(row, pending=()):
+    """One edge for the graph. `pending`: relationship ids waiting for approval."""
     return {
         'id': f"e{row['pk']}",
         'source': key(row['source_type_id'], row['source_id']),
@@ -222,6 +244,11 @@ def edge_dict(row):
         'status': row['status'],
         'criticality': row['criticality'],
         'color': row['color'],
+        'group': row['group'],
+        'group_min': row['group_min'],
+        'link_count': row['link_count'],
+        'note': row['note'],
+        'pending': row['relationship_id'] in pending,
     }
 
 
@@ -254,7 +281,8 @@ def build(user, roots, direction=BOTH, depth=None, filters=None):
         node['root'] = node_id in roots
         out_nodes.append(node)
     shown = {node['id'] for node in out_nodes}
-    out_edges = [edge_dict(row) for row in edges.values()]
+    pending = pending_ids(row['relationship_id'] for row in edges.values())
+    out_edges = [edge_dict(row, pending) for row in edges.values()]
     out_edges = [edge for edge in out_edges if edge['source'] in shown and edge['target'] in shown]
     return {
         'nodes': sorted(out_nodes, key=lambda n: (n['hops'], n['label'])),

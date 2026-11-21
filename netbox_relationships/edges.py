@@ -36,8 +36,9 @@ def _manual_row(rel):
         target_type_id=rel.target_type_id, target_id=rel.target_id,
         origin=MANUAL, relationship=rel, rtype=rtype,
         label=rtype.forward_label, reverse_label=rtype.reverse_label,
-        impact=rtype.impact, symmetric=rtype.symmetric,
+        impact=rel.impact or rtype.impact, symmetric=rtype.symmetric,
         status=rel.status, criticality=rel.criticality, color=rtype.color,
+        group=rel.group, group_min=rel.group_min or 1, note=rel.label,
     )
 
 
@@ -53,11 +54,15 @@ def drop_relationship(pk):
 
 
 def sync_type(rtype):
-    """Labels, impact and colour of a type changed: rewrite its rows in place."""
-    EdgeIndex.objects.filter(origin=MANUAL, rtype=rtype).update(
-        label=rtype.forward_label, reverse_label=rtype.reverse_label,
-        impact=rtype.impact, symmetric=rtype.symmetric, color=rtype.color,
+    """
+    Labels, impact and colour of a type changed: rewrite its rows in place.
+    Relationships with their own impact keep it.
+    """
+    rows = EdgeIndex.objects.filter(origin=MANUAL, rtype=rtype)
+    rows.update(
+        label=rtype.forward_label, reverse_label=rtype.reverse_label, symmetric=rtype.symmetric, color=rtype.color,
     )
+    rows.filter(relationship__impact='').update(impact=rtype.impact)
 
 
 def _derived_rows(provider, ids=None):
@@ -73,6 +78,7 @@ def _derived_rows(provider, ids=None):
             origin=spec.key, owner_type=owner_ct, owner_id=edge.owner_id,
             label=spec.label, reverse_label=spec.reverse_label,
             impact=spec.impact, symmetric=spec.symmetric, color=spec.color,
+            group=edge.group, group_min=edge.group_min, link_count=edge.link_count, note=edge.note[:200],
         ))
     return rows
 
@@ -117,3 +123,15 @@ def rebuild():
                 counts[row.origin] = counts.get(row.origin, 0) + 1
     logger.info('Rebuilt the relationship index: %s', counts)
     return counts
+
+
+def refresh_network():
+    """
+    Rewrite every network cable link, after the tiers changed. Runs the two
+    uplink providers over all their owners; other links are left alone.
+    """
+    from .derived import UPLINK_PROVIDERS
+    with transaction.atomic():
+        for provider in UPLINK_PROVIDERS:
+            EdgeIndex.objects.filter(origin__in=provider.keys, owner_type=_ct(provider.owner)).delete()
+            EdgeIndex.objects.bulk_create(_derived_rows(provider), batch_size=BATCH)

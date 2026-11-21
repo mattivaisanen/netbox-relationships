@@ -7,24 +7,43 @@ from django.utils.translation import gettext_lazy as _
 from core.models import ObjectType
 from dcim.models import Device, DeviceRole
 from netbox.forms import (
-    OrganizationalModelBulkEditForm, OrganizationalModelFilterSetForm, OrganizationalModelForm,
-    OrganizationalModelImportForm, PrimaryModelBulkEditForm, PrimaryModelFilterSetForm, PrimaryModelForm,
+    OrganizationalModelBulkEditForm,
+    OrganizationalModelFilterSetForm,
+    OrganizationalModelForm,
+    OrganizationalModelImportForm,
+    PrimaryModelBulkEditForm,
+    PrimaryModelFilterSetForm,
+    PrimaryModelForm,
     PrimaryModelImportForm,
 )
 from tenancy.forms import TenancyFilterForm, TenancyForm
 from tenancy.models import Tenant
 from utilities.forms import BOOLEAN_WITH_BLANK_CHOICES, add_blank_choice
 from utilities.forms.fields import (
-    ColorField, CommentField, ContentTypeMultipleChoiceField, CSVChoiceField, CSVContentTypeField,
-    CSVModelChoiceField, CSVModelMultipleChoiceField, DynamicModelChoiceField, DynamicModelMultipleChoiceField,
-    GenericObjectChoiceField, SlugField, TagFilterField,
+    ColorField,
+    CommentField,
+    ContentTypeMultipleChoiceField,
+    CSVChoiceField,
+    CSVContentTypeField,
+    CSVModelChoiceField,
+    CSVModelMultipleChoiceField,
+    DynamicModelChoiceField,
+    DynamicModelMultipleChoiceField,
+    GenericObjectChoiceField,
+    SlugField,
+    TagFilterField,
 )
 from utilities.forms.mixins import GenericObjectFormMixin
 from utilities.forms.rendering import FieldSet
 from utilities.forms.widgets import BulkEditNullBooleanSelect
 
 from .choices import (
-    CardinalityChoices, CategoryChoices, CriticalityChoices, ImpactChoices, ServiceKindChoices, StatusChoices,
+    CardinalityChoices,
+    CategoryChoices,
+    CriticalityChoices,
+    ImpactChoices,
+    ServiceKindChoices,
+    StatusChoices,
 )
 from .models import LogicalService, NetworkTier, Relationship, RelationshipType
 

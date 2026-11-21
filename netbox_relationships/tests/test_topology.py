@@ -6,7 +6,16 @@ from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase, override_settings
 
 from dcim.models import (
-    Cable, Device, DeviceRole, DeviceType, FrontPort, Interface, Manufacturer, PortMapping, RearPort, Site,
+    Cable,
+    Device,
+    DeviceRole,
+    DeviceType,
+    FrontPort,
+    Interface,
+    Manufacturer,
+    PortMapping,
+    RearPort,
+    Site,
     VirtualChassis,
 )
 

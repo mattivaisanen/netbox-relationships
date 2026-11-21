@@ -13,7 +13,7 @@ class NetBoxRelationshipsConfig(PluginConfig):
         'Typed relationships between any NetBox objects, links NetBox already knows, '
         'a dependency graph, impact analysis and a layered service map.'
     )
-    version = '0.2.0'
+    version = '0.2.1'
     author = 'Matti'
     base_url = 'relationships'
     # The oldest NetBox release the tests run on.

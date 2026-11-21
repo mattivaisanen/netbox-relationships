@@ -7,6 +7,10 @@ web server after `collectstatic`, which a plugin installed or updated in a
 container often never gets. Served from here, a restart is all an update
 needs. Browsers cache them; the plugin version in the address makes them
 load again after an upgrade.
+
+Vendored: cytoscape.min.js is Cytoscape.js 3.30.2, unchanged, from
+https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js (MIT, see
+LICENSE-cytoscape.txt). The other files are this plugin's own.
 """
 import os
 

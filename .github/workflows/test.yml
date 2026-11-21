@@ -1,16 +1,30 @@
 name: Test
 
-# Runs on pull requests, or by hand from the Actions tab.
+# Runs on pull requests (oldest supported NetBox only, to save minutes), or
+# by hand from the Actions tab (oldest and latest tested NetBox).
 on:
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   workflow_dispatch:
+
+# A new push to the same pull request cancels the run still going.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        netbox: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["v4.7.0", "v4.7.5"]') || fromJSON('["v4.7.0"]') }}
     env:
-      # Oldest supported release.
-      NETBOX_REF: v4.7.0
+      NETBOX_REF: ${{ matrix.netbox }}
 
     services:
       postgres:
@@ -56,8 +70,12 @@ jobs:
       - name: Install NetBox + plugin
         run: |
           pip install --upgrade pip
-          pip install -r netbox/requirements.txt
+          pip install -r netbox/requirements.txt ruff
           pip install -e plugin
+
+      - name: Lint
+        working-directory: plugin
+        run: ruff check .
 
       - name: Configure NetBox
         run: |

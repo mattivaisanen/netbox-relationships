@@ -9,7 +9,12 @@ from netbox.api.serializers import NetBoxModelSerializer
 from tenancy.api.serializers import TenantSerializer
 
 from ..choices import (
-    CardinalityChoices, CategoryChoices, CriticalityChoices, ImpactChoices, ServiceKindChoices, StatusChoices,
+    CardinalityChoices,
+    CategoryChoices,
+    CriticalityChoices,
+    ImpactChoices,
+    ServiceKindChoices,
+    StatusChoices,
 )
 from ..forms import linkable_types
 from ..models import LogicalService, NetworkTier, Relationship, RelationshipType

@@ -22,7 +22,12 @@ from netbox.models.features import ContactsMixin
 from utilities.fields import ColorField
 
 from .choices import (
-    CardinalityChoices, CategoryChoices, CriticalityChoices, ImpactChoices, ServiceKindChoices, StatusChoices,
+    CardinalityChoices,
+    CategoryChoices,
+    CriticalityChoices,
+    ImpactChoices,
+    ServiceKindChoices,
+    StatusChoices,
 )
 from .constants import MANUAL
 
